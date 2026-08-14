@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Scan common secret formats
+        shell: bash
+        run: |
+          if git grep -I -nE '(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|-----BEGIN [A-Z ]*PRIVATE KEY-----)'; then
+            echo "Potential secret detected"
+            exit 1
+          fi
+
+      - name: Install Linux dependencies
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          libwebkit2gtk-4.1-dev
+          libayatana-appindicator3-dev
+          librsvg2-dev
+          patchelf
+
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+
+      - name: Check JavaScript syntax
+        run: node --check src/main.js
+
+      - name: Check Rust formatting
+        working-directory: src-tauri
+        run: cargo fmt --all --check
+
+      - name: Run Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Run Rust tests
+        working-directory: src-tauri
+        run: cargo test --all-targets --locked

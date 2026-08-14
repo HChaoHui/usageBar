@@ -1,0 +1,72 @@
+# Logs
+logs
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+.envrc
+.netrc
+.npmrc
+.cargo/credentials
+.cargo/credentials.toml
+config.json
+config.local.json
+secrets*.json
+credentials*.json
+auth.json
+*response*.json
+dump*.json
+*.cookie
+*.cookies
+cookies.txt
+
+# Databases and captured traffic
+*.db
+*.sqlite
+*.sqlite3
+*.har
+*.trace
+*.crash
+
+# Keys, certificates, and signing material
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+*.cer
+*.crt
+*.der
+*.jks
+*.keystore
+*.kdbx
+id_rsa
+id_ed25519
+
+# Apple build products
+*.dSYM/
+*.xcarchive/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

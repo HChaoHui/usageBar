@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "refresh_interval_secs": 300,
+  "providers": [
+    {
+      "id": "opencode-go",
+      "type": "manual",
+      "display_name": "OpenCode Go",
+      "icon": "🛠",
+      "color": "#ff9f0a",
+      "unit": "credits",
+      "enabled": true,
+      "total": 500,
+      "used": 0
+    },
+    {
+      "id": "minimax",
+      "type": "minimax",
+      "display_name": "MiniMax",
+      "icon": "✨",
+      "color": "#5e5ce6",
+      "unit": "%",
+      "enabled": true,
+      "endpoint": "https://www.minimaxi.com/v1/token_plan/remains",
+      "api_key": "YOUR_MINIMAX_SUBSCRIPTION_KEY"
+    },
+    {
+      "id": "codex-cpa-direct",
+      "type": "cpa_direct",
+      "display_name": "Codex (CPA Direct)",
+      "icon": "🧠",
+      "color": "#30d158",
+      "unit": "%",
+      "enabled": true,
+      "endpoint": "http://127.0.0.1:8317",
+      "api_key": "YOUR_CPA_MANAGEMENT_KEY",
+      "auth_index": "YOUR_CPA_AUTH_INDEX",
+      "account_id": "OPTIONAL_CHATGPT_ACCOUNT_ID",
+      "quota_window": "auto"
+    },
+    {
+      "id": "codex-keeper-primary",
+      "type": "cpa_keeper",
+      "display_name": "Codex Primary (Keeper)",
+      "icon": "📅",
+      "color": "#0a84ff",
+      "unit": "%",
+      "enabled": true,
+      "endpoint": "http://127.0.0.1:8080",
+      "path": "/api/v1/quota/cache",
+      "auth_index": "YOUR_CPA_AUTH_INDEX",
+      "row_key": "rate_limit.primary_window"
+    },
+    {
+      "id": "deepseek",
+      "type": "deepseek",
+      "display_name": "DeepSeek",
+      "icon": "D",
+      "color": "#4389e8",
+      "unit": "CNY",
+      "enabled": true,
+      "endpoint": "https://api.deepseek.com/user/balance",
+      "api_key": "YOUR_DEEPSEEK_API_KEY",
+      "currency": "CNY"
+    }
+  ]
+}

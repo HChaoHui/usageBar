@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>usageBar</title>
+    <script type="module" src="/main.js" defer></script>
+  </head>
+  <body>
+    <div class="popup" id="main-view">
+      <header class="popup-header">
+        <div class="brand-lockup">
+          <h1>usageBar</h1>
+          <span>by HuangChaoHui</span>
+        </div>
+        <div class="header-actions">
+          <button id="refresh-btn" class="icon-button refresh-control" type="button" title="立即刷新" aria-label="立即刷新">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 12a9 9 0 0 0-15.08-6.74L3 8M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 15.08 6.74L21 16M21 21v-5h-5" />
+            </svg>
+          </button>
+          <button id="settings-btn" class="icon-button" type="button" title="设置" aria-label="设置">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.09A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.1 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H2V9.6h.4A1.7 1.7 0 0 0 4.1 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 8.5 4.1a1.7 1.7 0 0 0 1-.6A1.7 1.7 0 0 0 9.9 2.4V2h4.2v.4A1.7 1.7 0 0 0 15 4.1a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 8.5a1.7 1.7 0 0 0 .6 1 1.7 1.7 0 0 0 1.1.4h.4v4.2h-.4A1.7 1.7 0 0 0 19.4 15Z" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div id="providers" class="providers">
+        <div class="empty-state">
+          <p class="empty-hint">尚未配置任何订阅</p>
+          <p class="empty-subhint">点「设置」添加</p>
+        </div>
+      </div>
+
+      <footer class="popup-footer">
+        <div class="footer-meta">
+          <div id="status-bar" class="status-bar" aria-live="polite">
+            <span class="status-dot"></span>
+            <span class="status-text"></span>
+          </div>
+          <span id="global-updated-at" class="global-updated-at hidden" data-relative-time=""></span>
+        </div>
+        <div class="footer-actions">
+          <button id="quit-btn" class="footer-button" type="button" title="退出" aria-label="退出">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5v6M5.6 5.3a6 6 0 1 0 8.8 0" /></svg>
+          </button>
+        </div>
+      </footer>
+    </div>
+
+    <!-- 设置面板 -->
+    <div class="popup hidden" id="settings-view">
+      <header class="popup-header settings-header">
+        <button id="back-btn" class="back-button" type="button" title="返回">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+          <span>返回</span>
+        </button>
+        <h1>设置</h1>
+        <div class="header-actions"></div>
+      </header>
+
+      <div class="settings-body">
+        <section class="settings-section">
+          <h2>通用</h2>
+          <label class="settings-row">
+            <span>自动刷新</span>
+            <div class="custom-select compact" data-custom-select>
+              <input type="hidden" id="refresh-interval" value="300" />
+              <button class="custom-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                <span data-select-label>5 分钟</span>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg>
+              </button>
+              <div class="custom-select-menu align-right hidden" role="listbox">
+                <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="60">1 分钟</button>
+                <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="180">3 分钟</button>
+                <button class="custom-select-option selected" type="button" role="option" aria-selected="true" data-value="300">5 分钟</button>
+                <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="600">10 分钟</button>
+                <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="1800">30 分钟</button>
+              </div>
+            </div>
+          </label>
+        </section>
+
+        <section class="settings-section">
+          <div class="settings-section-heading">
+            <h2>Providers</h2>
+            <button type="button" id="provider-add-open" class="compact-action-btn">添加</button>
+          </div>
+          <div id="settings-providers" class="settings-providers"></div>
+        </section>
+
+        <section class="settings-section provider-editor hidden" id="provider-editor">
+          <h2 id="provider-form-title">添加 Provider</h2>
+          <form id="add-form" class="add-form">
+            <label class="field-row">
+              <span>名称</span>
+              <input name="display_name" required placeholder="例如：MiniMax 或 Codex" />
+            </label>
+            <label class="field-row">
+              <span>类型</span>
+              <div class="custom-select" data-custom-select>
+                <input type="hidden" name="type" id="add-type" value="minimax" />
+                <button class="custom-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                  <span data-select-label>MiniMax（订阅 Key）</span>
+                  <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg>
+                </button>
+                <div class="custom-select-menu hidden" role="listbox">
+                  <button class="custom-select-option selected" type="button" role="option" aria-selected="true" data-value="minimax">MiniMax（订阅 Key）</button>
+                  <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="cpa_direct">CLIProxyAPI（Codex 直连）</button>
+                  <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="deepseek">DeepSeek（API 余额）</button>
+                </div>
+              </div>
+            </label>
+
+            <div id="manual-fields" class="type-fields hidden">
+              <label class="field-row">
+                <span>总额度</span>
+                <input name="total" type="number" min="0" step="1" required placeholder="500" />
+              </label>
+            </div>
+
+            <div id="minimax-fields" class="type-fields">
+              <label class="field-row">
+                <span>订阅 Key</span>
+                <input name="api_key" type="password" placeholder="从 MiniMax 平台获取" autocomplete="off" autocapitalize="off" spellcheck="false" required />
+              </label>
+              <label class="field-row">
+                <span>API 地址</span>
+                <input name="endpoint" value="https://www.minimaxi.com/v1/token_plan/remains" required />
+              </label>
+              <p class="hint">同时显示 5 小时和每周额度，并保留各自的重置时间。</p>
+            </div>
+
+            <div id="cpa-direct-fields" class="type-fields hidden">
+              <label class="field-row">
+                <span>CLIProxyAPI 地址</span>
+                <input name="endpoint" value="http://127.0.0.1:8317" required />
+              </label>
+              <label class="field-row">
+                <span>管理密钥</span>
+                <input name="api_key" type="password" placeholder="remote-management.secret-key 的原始密码" autocomplete="off" autocapitalize="off" spellcheck="false" required />
+              </label>
+              <label class="field-row">
+                <span>Auth Index</span>
+                <input name="auth_index" placeholder="例如：0123456789abcdef" autocapitalize="off" spellcheck="false" required />
+              </label>
+              <label class="field-row">
+                <span>ChatGPT Account ID（可选）</span>
+                <input name="account_id" placeholder="例如：00000000-0000-4000-8000-000000000000" autocapitalize="off" spellcheck="false" />
+              </label>
+              <label class="field-row">
+                <span>额度窗口</span>
+                <div class="custom-select" data-custom-select>
+                  <input type="hidden" name="quota_window" value="auto" />
+                  <button class="custom-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span data-select-label>自动（显示最紧张窗口）</span>
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg>
+                  </button>
+                  <div class="custom-select-menu hidden" role="listbox">
+                    <button class="custom-select-option selected" type="button" role="option" aria-selected="true" data-value="auto">自动（显示最紧张窗口）</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="five_hour">5 小时</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="weekly">每周</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="monthly">每月</button>
+                  </div>
+                </div>
+              </label>
+              <p class="hint">直接调用 CPA 的 <code>/v0/management/api-call</code>。管理密钥用于 CPA 外层鉴权，账号 Token 由 CPA 根据 Auth Index 自动替换；窗口类型按 <code>limit_window_seconds</code> 判断。</p>
+            </div>
+
+            <div id="deepseek-fields" class="type-fields hidden">
+              <label class="field-row">
+                <span>DeepSeek API Key</span>
+                <input name="api_key" type="password" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false" required />
+              </label>
+              <label class="field-row">
+                <span>API 地址</span>
+                <input name="endpoint" value="https://api.deepseek.com/user/balance" required />
+              </label>
+              <label class="field-row">
+                <span>显示币种</span>
+                <div class="custom-select" data-custom-select>
+                  <input type="hidden" name="currency" value="CNY" />
+                  <button class="custom-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span data-select-label>CNY（人民币）</span>
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg>
+                  </button>
+                  <div class="custom-select-menu hidden" role="listbox">
+                    <button class="custom-select-option selected" type="button" role="option" aria-selected="true" data-value="CNY">CNY（人民币）</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="USD">USD（美元）</button>
+                  </div>
+                </div>
+              </label>
+              <p class="hint">显示总余额、充值余额和赠送余额。若所选币种不存在，会使用接口返回的第一个币种。</p>
+            </div>
+
+            <div id="cpa-keeper-fields" class="type-fields hidden">
+              <label class="field-row">
+                <span>Keeper 地址</span>
+                <input name="endpoint" placeholder="http://127.0.0.1:8080" required />
+              </label>
+              <label class="field-row">
+                <span>API 路径</span>
+                <input name="path" value="/api/v1/quota/cache" required />
+              </label>
+              <label class="field-row">
+                <span>Auth Index</span>
+                <input name="auth_index" placeholder="例如：0123456789abcdef" required />
+              </label>
+              <label class="field-row">
+                <span>额度窗口</span>
+                <div class="custom-select" data-custom-select>
+                  <input type="hidden" name="row_key" value="rate_limit.primary_window" />
+                  <button class="custom-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span data-select-label>Codex Primary Window</span>
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg>
+                  </button>
+                  <div class="custom-select-menu hidden" role="listbox">
+                    <button class="custom-select-option selected" type="button" role="option" aria-selected="true" data-value="rate_limit.primary_window">Codex Primary Window</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="rate_limit.secondary_window">Codex Secondary Window</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="five_hour">Claude 5 小时</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="seven_day">Claude 每周</button>
+                  </div>
+                </div>
+              </label>
+              <label class="field-row">
+                <span>Admin Session Cookie</span>
+                <input name="api_key" type="password" placeholder="AUTH_ENABLED=false 时留空" autocomplete="off" autocapitalize="off" spellcheck="false" />
+              </label>
+              <p class="hint">Auth Index 可从 Keeper 的 <code>/api/v1/usage/identities</code> 获取。Codex 的 Primary/Secondary 只是返回位置，实际周期以 Keeper 展示的窗口秒数为准。若启用登录，填写完整的 <code>cpa_usage_keeper_session=...</code>，不是 CPA 管理密码。</p>
+            </div>
+
+            <div id="http-fields" class="type-fields hidden">
+              <label class="field-row">
+                <span>API 地址</span>
+                <input name="endpoint" placeholder="https://api.example.com/balance" required />
+              </label>
+              <label class="field-row">
+                <span>Bearer Token</span>
+                <input name="api_key" type="password" placeholder="可选" autocomplete="off" autocapitalize="off" spellcheck="false" />
+              </label>
+              <div class="field-row two-col">
+                <label>
+                  <span>「已用」JSON 路径</span>
+                  <input name="json_used" value="used" />
+                </label>
+                <label>
+                  <span>「总额」JSON 路径</span>
+                  <input name="json_total" value="total" />
+                </label>
+              </div>
+            </div>
+
+            <label id="clear-secret-row" class="clear-secret-row hidden">
+              <input name="clear_api_key" type="checkbox" />
+              <span>清除已保存的凭据</span>
+            </label>
+
+            <div class="provider-form-actions">
+              <button type="button" id="provider-edit-cancel" class="secondary-btn">取消</button>
+              <button type="submit" id="provider-submit" class="primary-btn">添加</button>
+            </div>
+          </form>
+        </section>
+      </div>
+
+      <div id="settings-status-bar" class="status-bar">
+        <span class="status-text"></span>
+      </div>
+    </div>
+
+    <!-- 编辑 manual provider 的弹窗 -->
+    <div class="modal hidden" id="edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+      <div class="modal-card">
+        <h3 id="edit-title">更新用量</h3>
+        <form id="edit-form">
+          <label>
+            <span>已使用</span>
+            <input id="edit-used" type="number" min="0" step="0.01" required />
+          </label>
+          <div class="modal-actions">
+            <button type="button" id="edit-cancel" class="menu-item">取消</button>
+            <button type="submit" class="primary-btn">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+      <div class="modal-card confirm-card">
+        <h3 id="confirm-title">确认删除</h3>
+        <p id="confirm-message"></p>
+        <div class="modal-actions">
+          <button type="button" id="confirm-cancel" class="secondary-btn">取消</button>
+          <button type="button" id="confirm-ok" class="danger-btn">删除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  </body>
+</html>
