@@ -3,13 +3,13 @@
 //! 用法：用户填 endpoint + JSONPath（点号分隔）指向 used / total 字段
 //! 可选 Bearer Token 鉴权、可选 unit / reset_at 路径
 
-use super::{network_error, secure_http_client, validate_endpoint, Provider, ProviderError, Usage};
+use super::{Provider, ProviderError, Usage};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpProvider {
     pub id: String,
     pub display_name: String,
@@ -65,21 +65,22 @@ fn parse_reset_at(v: &serde_json::Value) -> Option<DateTime<Utc>> {
 impl Provider for HttpProvider {
     async fn fetch(&self) -> Result<Usage, ProviderError> {
         let timeout = Duration::from_secs(self.timeout_secs.unwrap_or(15));
-        let carries_credentials = self
-            .api_key
-            .as_deref()
-            .map(str::trim)
-            .filter(|key| !key.is_empty())
-            .is_some();
-        validate_endpoint(&self.endpoint, carries_credentials)?;
-        let mut req = secure_http_client()?.get(&self.endpoint).timeout(timeout);
+        let mut req = reqwest::Client::new().get(&self.endpoint).timeout(timeout);
         if let Some(key) = &self.api_key {
             if !key.is_empty() {
                 req = req.bearer_auth(key);
             }
         }
 
-        let resp = req.send().await.map_err(|error| network_error(&error))?;
+        let resp = req.send().await.map_err(|e| {
+            if e.is_timeout() {
+                ProviderError::Network(format!("timeout after {:?}", timeout))
+            } else if e.is_connect() {
+                ProviderError::Network(format!("connect failed: {}", e))
+            } else {
+                ProviderError::Network(e.to_string())
+            }
+        })?;
 
         let status = resp.status();
         if status.as_u16() == 401 || status.as_u16() == 403 {
@@ -98,7 +99,10 @@ impl Provider for HttpProvider {
             .ok_or_else(|| ProviderError::Parse(format!("json path not found: {}", self.json_used)))
             .and_then(|v| {
                 as_f64(v).ok_or_else(|| {
-                    ProviderError::Parse(format!("value at '{}' is not a number", self.json_used))
+                    ProviderError::Parse(format!(
+                        "value at '{}' is not a number: {}",
+                        self.json_used, v
+                    ))
                 })
             })?;
 
@@ -108,7 +112,10 @@ impl Provider for HttpProvider {
             })
             .and_then(|v| {
                 as_f64(v).ok_or_else(|| {
-                    ProviderError::Parse(format!("value at '{}' is not a number", self.json_total))
+                    ProviderError::Parse(format!(
+                        "value at '{}' is not a number: {}",
+                        self.json_total, v
+                    ))
                 })
             })?;
 
@@ -134,6 +141,8 @@ impl Provider for HttpProvider {
             fetched_at: Some(Utc::now()),
             windows: vec![],
             balance: None,
+            reset_credits: None,
+            codex_account: None,
         })
     }
 }

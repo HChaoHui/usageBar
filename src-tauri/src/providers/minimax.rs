@@ -6,17 +6,14 @@
 //! 返回 model_remains 数组，每个元素对应一个 model (general / video / ...)。
 //! 编程套餐以 general 为主，并同时受 5 小时窗口和周窗口限制。
 
-use super::{
-    network_error, secure_http_client, validate_endpoint, Provider, ProviderError, Usage,
-    UsageWindow,
-};
+use super::{Provider, ProviderError, Usage, UsageWindow};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 const MINIMAX_ENDPOINT: &str = "https://www.minimaxi.com/v1/token_plan/remains";
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MinimaxProvider {
     pub id: String,
     pub display_name: String,
@@ -35,43 +32,6 @@ struct QuotaCandidate {
     reset_at: Option<DateTime<Utc>>,
 }
 
-struct QuotaWindowSpec {
-    key: &'static str,
-    label: &'static str,
-    remaining_percent_keys: &'static [&'static str],
-    total_keys: &'static [&'static str],
-    remaining_count_keys: &'static [&'static str],
-    status_keys: &'static [&'static str],
-    reset_keys: &'static [&'static str],
-}
-
-const FIVE_HOUR_WINDOW: QuotaWindowSpec = QuotaWindowSpec {
-    key: "five_hour",
-    label: "5 小时",
-    remaining_percent_keys: &[
-        "current_interval_remaining_percent",
-        "currentIntervalRemainingPercent",
-    ],
-    total_keys: &["current_interval_total_count", "currentIntervalTotalCount"],
-    remaining_count_keys: &["current_interval_usage_count", "currentIntervalUsageCount"],
-    status_keys: &["current_interval_status", "currentIntervalStatus"],
-    reset_keys: &["end_time", "endTime"],
-};
-
-const WEEKLY_WINDOW: QuotaWindowSpec = QuotaWindowSpec {
-    key: "weekly",
-    label: "7 天",
-    remaining_percent_keys: &[
-        "current_weekly_remaining_percent",
-        "currentWeeklyRemainingPercent",
-        "weekly_remaining_percent",
-    ],
-    total_keys: &["current_weekly_total_count", "currentWeeklyTotalCount"],
-    remaining_count_keys: &["current_weekly_usage_count", "currentWeeklyUsageCount"],
-    status_keys: &["current_weekly_status", "currentWeeklyStatus"],
-    reset_keys: &["weekly_end_time", "weeklyEndTime"],
-};
-
 #[async_trait]
 impl Provider for MinimaxProvider {
     async fn fetch(&self) -> Result<Usage, ProviderError> {
@@ -80,8 +40,7 @@ impl Provider for MinimaxProvider {
         } else {
             self.endpoint.trim()
         };
-        validate_endpoint(endpoint, true)?;
-        let resp = secure_http_client()?
+        let resp = reqwest::Client::new()
             .get(endpoint)
             .bearer_auth(&self.api_key)
             .header("Content-Type", "application/json")
@@ -90,7 +49,7 @@ impl Provider for MinimaxProvider {
             .timeout(std::time::Duration::from_secs(15))
             .send()
             .await
-            .map_err(|error| network_error(&error))?;
+            .map_err(|e| ProviderError::Network(e.to_string()))?;
 
         let status = resp.status();
         if status.as_u16() == 401 || status.as_u16() == 403 {
@@ -119,7 +78,11 @@ fn parse_usage(json: &serde_json::Value) -> Result<Usage, ProviderError> {
         .map(|code| code as i64)
     {
         if code != 0 {
-            let detail = format!("MiniMax API error (code={code})");
+            let msg = base_resp
+                .and_then(|resp| resp.get("status_msg"))
+                .and_then(|msg| msg.as_str())
+                .unwrap_or("unknown");
+            let detail = format!("MiniMax API error (code={code}): {msg}");
             return if matches!(code, 1004 | 2049) {
                 Err(ProviderError::Auth(detail))
             } else {
@@ -202,6 +165,8 @@ fn parse_usage(json: &serde_json::Value) -> Result<Usage, ProviderError> {
         fetched_at: Some(Utc::now()),
         windows,
         balance: None,
+        reset_credits: None,
+        codex_account: None,
     })
 }
 
@@ -209,14 +174,49 @@ fn candidates_for_entry(entry: &serde_json::Value) -> Vec<QuotaCandidate> {
     if unavailable_plan(entry) {
         return vec![];
     }
-    let interval = quota_window(entry, &FIVE_HOUR_WINDOW);
-    let weekly = quota_window(entry, &WEEKLY_WINDOW);
+    let interval = quota_window(
+        entry,
+        "five_hour",
+        "5 小时",
+        &[
+            "current_interval_remaining_percent",
+            "currentIntervalRemainingPercent",
+        ],
+        &["current_interval_total_count", "currentIntervalTotalCount"],
+        &["current_interval_usage_count", "currentIntervalUsageCount"],
+        &["current_interval_status", "currentIntervalStatus"],
+        &["end_time", "endTime"],
+    );
+    let weekly = quota_window(
+        entry,
+        "weekly",
+        "7 天",
+        &[
+            "current_weekly_remaining_percent",
+            "currentWeeklyRemainingPercent",
+            "weekly_remaining_percent",
+        ],
+        &["current_weekly_total_count", "currentWeeklyTotalCount"],
+        &["current_weekly_usage_count", "currentWeeklyUsageCount"],
+        &["current_weekly_status", "currentWeeklyStatus"],
+        &["weekly_end_time", "weeklyEndTime"],
+    );
 
     [interval, weekly].into_iter().flatten().collect()
 }
 
-fn quota_window(entry: &serde_json::Value, spec: &QuotaWindowSpec) -> Option<QuotaCandidate> {
-    let status = field(entry, spec.status_keys)
+#[allow(clippy::too_many_arguments)]
+fn quota_window(
+    entry: &serde_json::Value,
+    key: &'static str,
+    label: &'static str,
+    remaining_percent_keys: &[&str],
+    total_keys: &[&str],
+    remaining_count_keys: &[&str],
+    status_keys: &[&str],
+    reset_keys: &[&str],
+) -> Option<QuotaCandidate> {
+    let status = field(entry, status_keys)
         .and_then(number)
         .map(|value| value as i64);
     if status == Some(0) {
@@ -225,13 +225,13 @@ fn quota_window(entry: &serde_json::Value, spec: &QuotaWindowSpec) -> Option<Quo
 
     let used_percent = if status == Some(2) {
         100.0
-    } else if let Some(remaining) = field(entry, spec.remaining_percent_keys).and_then(number) {
+    } else if let Some(remaining) = field(entry, remaining_percent_keys).and_then(number) {
         100.0 - remaining.clamp(0.0, 100.0)
     } else if status == Some(3) {
         0.0
     } else {
-        let total = field(entry, spec.total_keys).and_then(number)?;
-        let remaining = field(entry, spec.remaining_count_keys).and_then(number)?;
+        let total = field(entry, total_keys).and_then(number)?;
+        let remaining = field(entry, remaining_count_keys).and_then(number)?;
         if total <= 0.0 {
             return None;
         }
@@ -239,14 +239,14 @@ fn quota_window(entry: &serde_json::Value, spec: &QuotaWindowSpec) -> Option<Quo
     };
 
     Some(QuotaCandidate {
-        key: spec.key,
+        key,
         label: if status == Some(3) {
-            format!("{} · 无限", spec.label)
+            format!("{label} · 无限")
         } else {
-            spec.label.into()
+            label.into()
         },
         used_percent: used_percent.clamp(0.0, 100.0),
-        reset_at: field(entry, spec.reset_keys).and_then(timestamp),
+        reset_at: field(entry, reset_keys).and_then(timestamp),
     })
 }
 

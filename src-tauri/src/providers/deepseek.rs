@@ -1,9 +1,6 @@
 //! DeepSeek account balance Provider.
 
-use super::{
-    network_error, secure_http_client, validate_endpoint, BalanceDetails, Provider, ProviderError,
-    Usage,
-};
+use super::{BalanceDetails, Provider, ProviderError, Usage};
 use async_trait::async_trait;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -11,7 +8,7 @@ use std::time::Duration;
 
 const DEEPSEEK_BALANCE_ENDPOINT: &str = "https://api.deepseek.com/user/balance";
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeepSeekProvider {
     pub id: String,
     pub display_name: String,
@@ -34,16 +31,15 @@ impl Provider for DeepSeekProvider {
         if self.api_key.trim().is_empty() {
             return Err(ProviderError::Auth("DeepSeek API key is required".into()));
         }
-        validate_endpoint(endpoint, true)?;
 
-        let resp = secure_http_client()?
+        let resp = reqwest::Client::new()
             .get(endpoint)
             .bearer_auth(self.api_key.trim())
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(15))
             .send()
             .await
-            .map_err(|error| network_error(&error))?;
+            .map_err(|error| ProviderError::Network(error.to_string()))?;
 
         let status = resp.status();
         if matches!(status.as_u16(), 401 | 403) {
@@ -106,6 +102,8 @@ fn parse_usage(json: &serde_json::Value, preferred_currency: &str) -> Result<Usa
             topped_up,
             available,
         }),
+        reset_credits: None,
+        codex_account: None,
     })
 }
 

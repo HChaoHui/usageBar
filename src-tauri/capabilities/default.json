@@ -4,7 +4,16 @@
   "description": "Capability for the main popup window",
   "windows": ["main"],
   "permissions": [
-    "core:event:allow-listen",
-    "core:event:allow-unlisten"
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-is-visible",
+    "core:window:allow-close",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:event:default",
+    "opener:default",
+    "positioner:default"
   ]
 }

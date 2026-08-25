@@ -33,6 +33,8 @@ impl Provider for ManualProvider {
             fetched_at: Some(Utc::now()),
             windows: vec![],
             balance: None,
+            reset_credits: None,
+            codex_account: None,
         })
     }
 }

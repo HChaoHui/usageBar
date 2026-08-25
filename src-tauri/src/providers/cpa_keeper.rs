@@ -12,13 +12,13 @@
 //! 需要先 POST `/api/v1/auth/login` 拿 `cpa_usage_keeper_session` cookie，
 //! 再把完整 cookie 串作为 `api_key` 传进来。
 
-use super::{network_error, secure_http_client, validate_endpoint, Provider, ProviderError, Usage};
+use super::{Provider, ProviderError, Usage};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CpaKeeperProvider {
     pub id: String,
     pub display_name: String,
@@ -66,9 +66,8 @@ impl Provider for CpaKeeperProvider {
             format!("/{}", self.path)
         };
         let url = format!("{}{}", base, path);
-        validate_endpoint(&url, true)?;
 
-        let mut req = secure_http_client()?
+        let mut req = reqwest::Client::new()
             .post(&url)
             .header("Content-Type", "application/json")
             .header("X-CPA-Usage-Keeper-Request", "fetch")
@@ -86,7 +85,10 @@ impl Provider for CpaKeeperProvider {
             }
         }
 
-        let resp = req.send().await.map_err(|error| network_error(&error))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| ProviderError::Network(e.to_string()))?;
 
         let status = resp.status();
         if status.as_u16() == 401 || status.as_u16() == 403 {
@@ -122,20 +124,22 @@ fn parse_usage(
         .iter()
         .find(|item| item.get("auth_index").and_then(|value| value.as_str()) == Some(auth_index))
         .ok_or_else(|| {
-            ProviderError::NotFound(
-                "configured account has no cached quota; refresh it in Keeper first".into(),
-            )
+            ProviderError::NotFound(format!(
+                "auth_index '{auth_index}' has no cached quota; refresh it in Keeper first"
+            ))
         })?;
 
     if item.get("status").and_then(|value| value.as_str()) == Some("failed") {
+        let message = item
+            .get("error")
+            .and_then(|value| value.as_str())
+            .unwrap_or("quota refresh failed");
         let status = item
             .get("http_status_code")
             .and_then(|value| value.as_i64())
             .map(|value| format!(" (HTTP {value})"))
             .unwrap_or_default();
-        return Err(ProviderError::Other(format!(
-            "quota refresh failed{status}"
-        )));
+        return Err(ProviderError::Other(format!("{message}{status}")));
     }
 
     let quota_rows = item
@@ -177,6 +181,8 @@ fn parse_usage(
         fetched_at: Some(Utc::now()),
         windows: vec![],
         balance: None,
+        reset_credits: None,
+        codex_account: None,
     })
 }
 
@@ -247,6 +253,6 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(error.to_string().contains("quota refresh failed"));
+        assert!(error.to_string().contains("invalid credential"));
     }
 }

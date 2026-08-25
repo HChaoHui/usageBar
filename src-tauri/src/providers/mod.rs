@@ -44,6 +44,30 @@ pub struct BalanceDetails {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResetCreditEntry {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResetCreditDetails {
+    pub available_count: u64,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub applicable_available_count: Option<u64>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub credits: Vec<ResetCreditEntry>,
+    pub immediate_reset_purchase_eligible: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodexAccountDetails {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub plan_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub subscription_active_until: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Usage {
     pub used: f64,
     pub total: f64,
@@ -58,6 +82,10 @@ pub struct Usage {
     pub windows: Vec<UsageWindow>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub balance: Option<BalanceDetails>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub reset_credits: Option<ResetCreditDetails>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub codex_account: Option<CodexAccountDetails>,
 }
 
 #[derive(Debug, Error)]
@@ -79,82 +107,6 @@ pub enum ProviderError {
 impl ProviderError {
     pub fn is_transient(&self) -> bool {
         matches!(self, Self::Transient(_))
-    }
-}
-
-pub(crate) fn network_error(error: &reqwest::Error) -> ProviderError {
-    let message = if error.is_timeout() {
-        "request timed out"
-    } else if error.is_connect() {
-        "connection failed"
-    } else if error.is_redirect() {
-        "redirect failed"
-    } else {
-        "request failed"
-    };
-    ProviderError::Network(message.into())
-}
-
-pub(crate) fn secure_http_client() -> Result<reqwest::Client, ProviderError> {
-    reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|_| ProviderError::Other("failed to initialize HTTP client".into()))
-}
-
-pub(crate) fn validate_endpoint(
-    endpoint: &str,
-    carries_credentials: bool,
-) -> Result<(), ProviderError> {
-    let url = reqwest::Url::parse(endpoint)
-        .map_err(|_| ProviderError::Other("invalid endpoint URL".into()))?;
-    if !url.username().is_empty() || url.password().is_some() {
-        return Err(ProviderError::Other(
-            "endpoint URL must not contain embedded credentials".into(),
-        ));
-    }
-    if url.query_pairs().any(|(name, _)| {
-        let name = name.to_ascii_lowercase().replace('-', "_");
-        matches!(
-            name.as_str(),
-            "api_key"
-                | "apikey"
-                | "key"
-                | "token"
-                | "access_token"
-                | "auth"
-                | "authorization"
-                | "password"
-                | "passwd"
-                | "secret"
-                | "signature"
-                | "sig"
-                | "cookie"
-                | "session"
-        ) || name.ends_with("_key")
-            || name.ends_with("_token")
-            || name.ends_with("_secret")
-            || name.ends_with("_password")
-            || name.ends_with("_signature")
-    }) {
-        return Err(ProviderError::Other(
-            "endpoint URL must not contain credentials in query parameters".into(),
-        ));
-    }
-
-    let loopback = matches!(
-        url.host_str(),
-        Some("localhost" | "127.0.0.1" | "::1" | "[::1]")
-    );
-    match url.scheme() {
-        "https" => Ok(()),
-        "http" if loopback || !carries_credentials => Ok(()),
-        "http" => Err(ProviderError::Other(
-            "credentialed remote endpoints must use HTTPS".into(),
-        )),
-        _ => Err(ProviderError::Other(
-            "endpoint URL must use HTTP or HTTPS".into(),
-        )),
     }
 }
 
@@ -270,25 +222,5 @@ pub fn build_provider(pc: &ProviderConfig) -> Option<Box<dyn Provider>> {
             }))
         }
         _ => None,
-    }
-}
-
-#[cfg(test)]
-mod security_tests {
-    use super::*;
-
-    #[test]
-    fn permits_https_and_loopback_http_for_credentials() {
-        assert!(validate_endpoint("https://api.example.com/usage", true).is_ok());
-        assert!(validate_endpoint("http://127.0.0.1:8317", true).is_ok());
-        assert!(validate_endpoint("http://[::1]:8317", true).is_ok());
-    }
-
-    #[test]
-    fn rejects_insecure_remote_or_embedded_credentials() {
-        assert!(validate_endpoint("http://api.example.com/usage", true).is_err());
-        assert!(validate_endpoint("https://user:password@example.com/usage", true).is_err());
-        assert!(validate_endpoint("https://example.com/usage?access_token=value", false).is_err());
-        assert!(validate_endpoint("file:///tmp/usage.json", false).is_err());
     }
 }

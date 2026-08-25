@@ -24,7 +24,7 @@
 - ✅ Tray 图标（左键切换 popup，右键菜单：显示/刷新/退出）
 - ✅ Popup 面板：每个订阅一行，进度条 + 剩余百分比 + 剩余/总额 + 错误状态
 - ✅ 点击 manual Provider 行 → 弹窗更新「已使用」数量
-- ✅ 设置面板：新增和编辑 MiniMax、CLIProxyAPI、DeepSeek Provider，删除 Provider，调整刷新间隔
+- ✅ 设置面板：新增 5 种 Provider（manual / http / minimax / cpa_direct / cpa_keeper）、删除 Provider、调整刷新间隔
 - ✅ 后台 scheduler：每 N 秒拉取一次（默认 300 秒），结果写入 cache
 - ✅ 实时推送：scheduler 完成后向前端发 `usagebar-updated` 事件，前端自动重渲染
 - ✅ 配置持久化：JSON 存到 `~/Library/Application Support/com.usagebar.desktop/config.json`（macOS）
@@ -97,7 +97,7 @@ JSON 路径支持点号嵌套：`data.balance.used`。数字/字符串数字都�
 
 ### cpa_direct — CLIProxyAPI 直连 Codex
 
-CLIProxyAPI 7.2.111 可通过 `POST /v0/management/api-call` 代理访问 Codex 官方 usage 接口，因此不安装 Keeper 也能读取当前配额：
+CLIProxyAPI 可通过 `POST /v0/management/api-call` 代理访问 Codex 官方接口，因此不安装 Keeper 也能读取当前配额、套餐和手动完整重置次数：
 
 ```json
 {
@@ -119,7 +119,11 @@ CLIProxyAPI 7.2.111 可通过 `POST /v0/management/api-call` 代理访问 Codex 
 | `account_id` |  | ChatGPT Account ID；当前 usage 接口可不填，必要时从 auth-files 的 `id_token.chatgpt_account_id` 获取 |
 | `quota_window` | ✅ | `auto` / `five_hour` / `weekly` / `monthly` |
 
-`auto` 会在服务端实际返回的窗口中选择已用百分比更高的一项。窗口类型根据 `limit_window_seconds` 判断，而不是根据 `primary_window` 或 `secondary_window` 判断：`18000` 是 5 小时，`604800` 是每周。
+`auto` 会在服务端实际返回的所有窗口中选择已用百分比更高的一项。窗口类型根据 `limit_window_seconds` 判断，而不是根据 `primary_window` 或 `secondary_window` 判断：`18000` 是 5 小时，`604800` 是每周，28 至 31 天按月度窗口处理。展开后会显示普通 Codex、Code Review 和 `additional_rate_limits` 中的全部额度窗口。
+
+设置页可通过 CPA 的 `GET /v0/management/auth-files` 自动发现 Codex OAuth 账号并填充 `auth_index`、ChatGPT Account ID。首页账户明细会显示 `plan_type`、`available_count`、`applicable_available_count`，并按到期时间逐条列出 `codex_rate_limits` 类型的可用重置额度。订阅到期时间只在 `wham/usage` 明确返回时显示，不采用可能过期的 auth-file Token 元数据。
+
+“使用一次完整重置”会在二次确认后，通过 CPA 代理调用 `POST https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume`。请求使用新的 `redeem_request_id`，操作会真实消耗一次重置额度且不可撤销。CPA 自身的 `POST /v0/management/reset-quota` 只清除本地 cooldown 状态，本应用不会将它误作完整重置。
 
 管理密钥只用于请求 CLIProxyAPI；转发给 ChatGPT 的 `$TOKEN$` 会由 CPA 按 `auth_index` 自动替换。此管理接口权限很高，建议只允许本机访问。
 
@@ -181,18 +185,6 @@ Keeper 若启用了 `AUTH_ENABLED`，先登录 `/api/v1/auth/login`，再把完�
 ```
 
 UI 上添加的 provider 会自动持久化，无需手动编辑 JSON。
-
-## 安全与隐私
-
-- usageBar 不包含遥测、分析或崩溃上报，也不会把配置发送给项目维护者。
-- API Key、管理密钥和 Session Cookie 仅用于请求用户配置的 Provider 地址。
-- 凭据保存在本机应用配置目录的 `config.json` 中；Unix 系统会将文件权限限制为仅当前用户可读写。
-- 设置页读取配置时不会把已保存的凭据返回给 WebView。编辑 Provider 时将凭据输入框留空即可保留原值。
-- 修改 Provider 的 API 地址时必须重新输入凭据，携带凭据的请求不会自动跟随 HTTP 重定向。
-- 携带凭据的远程接口必须使用 HTTPS；HTTP 只允许访问 `localhost`、`127.0.0.1` 或 `::1`。
-- 不要上传真实 `config.json`、接口响应、HAR 文件、日志、证书或签名材料。
-
-安全问题请按 [SECURITY.md](SECURITY.md) 中的方式私下报告。
 
 ## 开发
 
@@ -278,7 +270,3 @@ cargo tauri build --target aarch64-apple-darwin
 - **reqwest + rustls**：HTTPS 请求（不依赖系统 OpenSSL）
 - **serde / serde_json**：序列化 + JSON 路径解析
 - **async-trait**：Provider 接口抽象
-
-## License
-
-[MIT](LICENSE) © 2026 HuangChaoHui

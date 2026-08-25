@@ -524,6 +524,131 @@ button.quota-row:active {
   font-weight: 600;
 }
 
+.reset-credit-details-row {
+  padding: 8px 9px;
+  border: 0.5px solid transparent;
+  border-radius: 8px;
+  background: var(--quota-surface);
+}
+
+.reset-credit-details-head {
+  min-height: 18px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.codex-plan-badge {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  color: var(--blue);
+  font-size: 8.5px;
+  font-weight: 700;
+}
+
+.codex-subscription-row,
+.reset-credit-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 5px;
+  color: var(--tertiary);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.codex-subscription-row time {
+  color: var(--secondary);
+  text-align: right;
+}
+
+.reset-credit-summary-row {
+  padding-top: 5px;
+  border-top: 0.5px solid var(--separator);
+  color: var(--secondary);
+}
+
+.reset-credit-summary-row strong {
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.reset-credit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 5px;
+  padding-top: 5px;
+}
+
+.reset-credit-item {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--secondary);
+  font-size: 9px;
+}
+
+.reset-credit-item time {
+  overflow: hidden;
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.reset-credit-item.muted,
+.reset-credit-item.muted time,
+.reset-credit-empty {
+  color: var(--tertiary);
+}
+
+.reset-credit-empty,
+.reset-credit-purchase,
+.reset-credit-action {
+  font-size: 9px;
+}
+
+.reset-credit-purchase {
+  color: var(--blue);
+}
+
+.reset-credit-actions {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.reset-credit-action {
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 0.5px solid color-mix(in srgb, var(--blue) 35%, var(--separator));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
+  color: var(--blue);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.reset-credit-action:hover {
+  background: color-mix(in srgb, var(--blue) 14%, var(--surface));
+}
+
+.reset-credit-action:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .provider-error {
   color: var(--red);
   font-size: 10px;
@@ -981,6 +1106,96 @@ input[type="number"]::-webkit-outer-spin-button {
   font-size: 10px;
 }
 
+.cpa-account-discovery {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.cpa-account-discovery .compact-action-btn {
+  white-space: nowrap;
+}
+
+.cpa-account-discovery > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tertiary);
+  font-size: 9px;
+  line-height: 1.35;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cpa-account-discovery code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 8.5px;
+}
+
+.cpa-account-results {
+  max-height: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.cpa-account-option {
+  width: 100%;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 0.5px solid var(--separator);
+  border-radius: 7px;
+  background: var(--field);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cpa-account-option:hover,
+.cpa-account-option.selected {
+  border-color: color-mix(in srgb, var(--blue) 40%, var(--separator));
+  background: color-mix(in srgb, var(--blue) 8%, var(--field));
+}
+
+.cpa-account-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cpa-account-option-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cpa-account-option-copy strong {
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 620;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cpa-account-option-copy small,
+.cpa-account-option-plan {
+  color: var(--tertiary);
+  font-size: 8.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cpa-account-option-plan {
+  flex: 0 0 auto;
+  color: var(--blue);
+  white-space: nowrap;
+}
+
 .type-fields {
   display: flex;
   flex-direction: column;
@@ -1011,22 +1226,6 @@ input[type="number"]::-webkit-outer-spin-button {
   align-items: center;
   justify-content: flex-end;
   gap: 7px;
-}
-
-.clear-secret-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--secondary);
-  font-size: 10px;
-  cursor: default;
-}
-
-.clear-secret-row input {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  accent-color: var(--red);
 }
 
 .secondary-btn,

@@ -18,8 +18,10 @@ let editingProviderId = null;
 let confirmAction = null;
 let currentView = "main";
 let lastSnapshot = [];
-let settingsConfig = null;
+let discoveredCpaAccounts = [];
+let cpaDiscoveryGeneration = 0;
 const expandedProviderGroups = new Set();
+const consumingCodexProviders = new Set();
 let resizeFrame = null;
 
 // ==================== utilities ====================
@@ -116,7 +118,6 @@ function toggleTypeFields() {
       control.disabled = !active;
     });
   });
-  setSecretFieldMode(Boolean(editingProviderId));
 }
 
 function fmtResetAt(iso) {
@@ -278,6 +279,36 @@ function renderProviders(snapshots) {
       openEditModal(row.dataset.id);
     });
   });
+  container.querySelectorAll('[data-action="consume-codex-reset"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.id;
+      if (consumingCodexProviders.has(id)) return;
+      const count = Number(button.dataset.count) || 0;
+      openConfirm(`将立即消耗 1 次 Codex 完整重置（当前剩余 ${count} 次），此操作不可撤销。继续？`, async () => {
+        consumingCodexProviders.add(id);
+        renderProviders(lastSnapshot);
+        try {
+          await invoke("consume_cpa_codex_reset", { id });
+        } catch (err) {
+          consumingCodexProviders.delete(id);
+          renderProviders(lastSnapshot);
+          showToast(`重置失败: ${err}`, true);
+          return;
+        }
+        consumingCodexProviders.delete(id);
+        showToast("已使用一次完整重置");
+        try {
+          const snapshots = await invoke("list_providers");
+          renderProviders(snapshots);
+        } catch (err) {
+          showToast(`重置已生效，但刷新失败: ${err}`, true);
+        }
+      }, {
+        title: "确认使用完整重置",
+        confirmText: "使用一次",
+      });
+    });
+  });
   const okCount = snapshots.filter((s) => !s.error).length;
   const errCount = snapshots.length - okCount;
   setStatus(errCount > 0 ? "warn" : null, errCount > 0 ? `${okCount} 正常 · ${errCount} 失败` : "");
@@ -290,7 +321,7 @@ function groupProviders(snapshots) {
   const byKey = new Map();
   snapshots.forEach((provider) => {
     const displayName = providerGroupName(provider);
-    const key = ["cpa_direct", "cpa_keeper"].includes(provider.kind)
+    const key = provider.kind === "cpa_keeper"
       ? `${provider.kind}:${displayName.toLowerCase()}`
       : `${provider.kind}:${provider.id}`;
     let group = byKey.get(key);
@@ -321,15 +352,33 @@ function providerGroupName(provider) {
 }
 
 function renderProviderGroup(group) {
-  const items = group.entries.flatMap(providerDisplayItems);
+  let codexDetailsIncluded = false;
+  const items = group.entries.flatMap(providerDisplayItems).filter((item) => {
+    if (item.type !== "codex-details") return true;
+    if (codexDetailsIncluded) return false;
+    codexDetailsIncluded = true;
+    return true;
+  });
   const expandable = items.length > 1;
   const expanded = expandable && expandedProviderGroups.has(group.group_key);
-  const summary = expandable ? providerSummaryItem(items) : items[0];
+  const summary = expandable ? providerSummaryItem(items, group.kind) : items[0];
   const visibleItems = expanded ? items : summary ? [summary] : [];
   const hiddenCount = Math.max(0, items.length - 1);
+  const codexDetailsItem = items.find((item) => item.type === "codex-details");
+  const resetCreditCount = codexDetailsItem?.usage?.reset_credits
+    ? Math.max(0, Number(codexDetailsItem.usage.reset_credits.available_count) || 0)
+    : null;
+  const planLabel = formatCodexPlan(codexDetailsItem?.usage?.codex_account?.plan_type);
+  const codexMeta = [
+    planLabel,
+    resetCreditCount == null ? "" : `${resetCreditCount} 次重置`,
+  ].filter(Boolean).join(" · ");
+  const otherHiddenCount = Math.max(0, hiddenCount - (codexDetailsItem ? 1 : 0));
   const summaryMeta = items.some((item) => item.type === "balance-details")
     ? "余额明细"
-    : `另有 ${hiddenCount} 项`;
+    : codexDetailsItem
+      ? `${codexMeta || "账户明细"}${otherHiddenCount > 0 ? ` · 另有 ${otherHiddenCount} 项` : ""}`
+      : `另有 ${hiddenCount} 项`;
   const titlebar = expandable
     ? `<button class="provider-titlebar provider-toggle" type="button" data-action="toggle-provider" data-group-key="${escape(group.group_key)}" aria-expanded="${expanded}" title="${expanded ? "收起明细" : "展开全部明细"}">
         <span class="provider-title-copy">
@@ -338,7 +387,11 @@ function renderProviderGroup(group) {
         </span>
         <svg class="provider-toggle-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg>
       </button>`
-    : `<div class="provider-titlebar"><h2>${escape(group.display_name)}</h2></div>`;
+    : `<div class="provider-titlebar">
+        <span class="provider-title-copy">
+          <h2>${escape(group.display_name)}</h2>
+        </span>
+      </div>`;
   return `
     <section class="provider-group${expanded ? " expanded" : ""}" data-kind="${escape(group.kind)}">
       ${titlebar}
@@ -361,16 +414,33 @@ function providerDisplayItems(p) {
     ];
   }
   const windows = Array.isArray(p.usage.windows) && p.usage.windows.length > 0
-    ? p.usage.windows.map((window) => ({ ...window, fetched_at: p.usage.fetched_at }))
+    ? p.usage.windows.map((window) => ({
+        ...window,
+        fetched_at: p.usage.fetched_at,
+      }))
     : [p.usage];
-  return windows.map((usage) => ({ type: "quota", provider: p, usage, clickable }));
+  const items = windows.map((usage) => ({ type: "quota", provider: p, usage, clickable }));
+  if (p.kind === "cpa_direct" && (p.usage.reset_credits || p.usage.codex_account)) {
+    items.push({
+      type: "codex-details",
+      provider: p,
+      usage: p.usage,
+    });
+  }
+  return items;
 }
 
-function providerSummaryItem(items) {
+function providerSummaryItem(items, providerKind) {
   const error = items.find((item) => item.type === "error");
   if (error) return error;
   const quotas = items.filter((item) => item.type === "quota");
   if (quotas.length > 0) {
+    if (providerKind === "cpa_direct") {
+      const codexFiveHour = quotas.find((item) =>
+        /^codex-(?:primary|secondary)-five-hour$/.test(item.usage.key || "")
+      );
+      if (codexFiveHour) return codexFiveHour;
+    }
     return quotas.reduce((selected, item) => {
       const selectedRemaining = quotaRemainingPercent(selected.usage);
       const itemRemaining = quotaRemainingPercent(item.usage);
@@ -398,9 +468,85 @@ function renderProviderItem(item) {
       </div>
     `;
   }
+  if (item.type === "codex-details") {
+    return renderCodexDetails(item.provider, item.usage);
+  }
   if (item.type === "balance-summary") return renderBalanceSummary(item.provider, item.usage);
   if (item.type === "balance-details") return renderBalanceDetails(item.provider, item.usage);
   return renderQuotaRow(item.provider, item.usage, item.clickable);
+}
+
+function formatCodexPlan(planType) {
+  const plan = (planType || "").toString().trim().toLowerCase();
+  if (!plan) return "";
+  if (plan === "pro") return "Pro";
+  if (plan === "plus") return "Plus";
+  if (plan === "team") return "Team";
+  if (plan === "free") return "Free";
+  return planType;
+}
+
+function renderCodexDetails(p, usage) {
+  const resetCredits = usage.reset_credits;
+  const account = usage.codex_account || {};
+  const count = resetCredits ? Math.max(0, Number(resetCredits.available_count) || 0) : 0;
+  const applicableCount = resetCredits?.applicable_available_count == null
+    ? null
+    : Math.max(0, Number(resetCredits.applicable_available_count) || 0);
+  const credits = Array.isArray(resetCredits?.credits) ? resetCredits.credits : [];
+  const rows = credits.map((credit, index) => {
+    const expiresAt = credit.expires_at;
+    return `
+      <div class="reset-credit-item">
+        <span>第 ${index + 1} 次重置</span>
+        ${expiresAt
+          ? `<time datetime="${escape(expiresAt)}">${escape(fmtResetAt(expiresAt))} 到期</time>`
+          : "<time>到期时间未知</time>"}
+      </div>
+    `;
+  });
+  const missingCount = Math.max(0, count - credits.length);
+  if (missingCount > 0) {
+    rows.push(`
+      <div class="reset-credit-item muted">
+        <span>其余 ${missingCount} 次重置</span>
+        <time>到期时间未返回</time>
+      </div>
+    `);
+  }
+  if (rows.length === 0) {
+    rows.push('<div class="reset-credit-empty">暂无可用重置次数</div>');
+  }
+  const plan = formatCodexPlan(account.plan_type);
+  const subscriptionUntil = account.subscription_active_until;
+  return `
+    <div class="reset-credit-details-row" data-id="${escape(p.id)}">
+      <div class="reset-credit-details-head">
+        <span class="quota-label">Codex 账户</span>
+        ${plan ? `<span class="codex-plan-badge">${escape(plan)}</span>` : ""}
+      </div>
+      ${subscriptionUntil
+        ? `<div class="codex-subscription-row"><span>订阅到期</span><time datetime="${escape(subscriptionUntil)}">${escape(fmtResetAt(subscriptionUntil))}</time></div>`
+        : ""}
+      ${resetCredits ? `
+        <div class="reset-credit-summary-row">
+          <span>剩余重置次数 <strong>${count}</strong></span>
+          ${applicableCount == null || applicableCount === count
+            ? ""
+            : `<span>当前可使用 ${applicableCount}</span>`}
+        </div>
+        <div class="reset-credit-list">${rows.join("")}</div>
+        <div class="reset-credit-actions">
+          ${resetCredits.immediate_reset_purchase_eligible
+            ? '<span class="reset-credit-purchase">支持购买额外重置</span>'
+            : "<span></span>"}
+          ${count > 0
+            ? `<button class="reset-credit-action" type="button" data-action="consume-codex-reset" data-id="${escape(p.id)}" data-count="${count}"${consumingCodexProviders.has(p.id) ? " disabled" : ""}>${consumingCodexProviders.has(p.id) ? "正在重置…" : "使用一次完整重置"}</button>`
+            : ""}
+        </div>
+      ` : '<div class="reset-credit-empty">未返回重置次数信息</div>'}
+    </div>
+  `;
 }
 
 function balanceDisplay(usage) {
@@ -540,7 +686,69 @@ function renderSettingsProviders(snapshots) {
 }
 
 function configuredProvider(id) {
-  return settingsConfig?.providers?.find((provider) => provider.id === id) || null;
+  const cfg = window.__usagebarConfig;
+  return cfg?.providers?.find((provider) => provider.id === id) || null;
+}
+
+function resetCpaAccountDiscovery() {
+  cpaDiscoveryGeneration += 1;
+  discoveredCpaAccounts = [];
+  const results = $("cpa-account-results");
+  results.innerHTML = "";
+  results.classList.add("hidden");
+  const button = $("cpa-discover-accounts");
+  if (button) {
+    button.disabled = $("add-type").value !== "cpa_direct";
+    button.textContent = "读取 Codex 账号";
+  }
+}
+
+function selectDiscoveredCpaAccount(index) {
+  const account = discoveredCpaAccounts[index];
+  if (!account || account.disabled) return;
+  const fields = $("cpa-direct-fields");
+  fields.querySelector('[name="auth_index"]').value = account.auth_index || "";
+  fields.querySelector('[name="account_id"]').value = account.account_id || "";
+  document.querySelectorAll(".cpa-account-option").forEach((button, buttonIndex) => {
+    button.classList.toggle("selected", buttonIndex === index);
+  });
+  showToast(`已选择 ${account.display_name}`);
+}
+
+function renderDiscoveredCpaAccounts(accounts) {
+  discoveredCpaAccounts = accounts;
+  const results = $("cpa-account-results");
+  if (accounts.length === 0) {
+    results.innerHTML = '<div class="reset-credit-empty">没有发现可用的 Codex OAuth 账号</div>';
+    results.classList.remove("hidden");
+    resizeWindowToContent();
+    return;
+  }
+  results.innerHTML = accounts.map((account, index) => {
+    const plan = formatCodexPlan(account.plan_type);
+    const authIndex = (account.auth_index || "").toString();
+    const shortIndex = authIndex.length > 12
+      ? `${authIndex.slice(0, 6)}…${authIndex.slice(-4)}`
+      : authIndex;
+    return `
+      <button class="cpa-account-option" type="button" data-account-index="${index}"${account.disabled ? " disabled" : ""}>
+        <span class="cpa-account-option-copy">
+          <strong>${escape(account.display_name || "Codex 账号")}${account.disabled ? "（已停用）" : ""}</strong>
+          <small>${escape(shortIndex)}</small>
+        </span>
+        ${plan ? `<span class="cpa-account-option-plan">${escape(plan)}</span>` : ""}
+      </button>
+    `;
+  }).join("");
+  results.classList.remove("hidden");
+  results.querySelectorAll(".cpa-account-option").forEach((button) => {
+    button.addEventListener("click", () => selectDiscoveredCpaAccount(Number(button.dataset.accountIndex)));
+  });
+  const available = accounts
+    .map((account, index) => ({ account, index }))
+    .filter(({ account }) => !account.disabled);
+  if (available.length === 1) selectDiscoveredCpaAccount(available[0].index);
+  resizeWindowToContent();
 }
 
 function beginProviderEdit(id) {
@@ -550,6 +758,7 @@ function beginProviderEdit(id) {
     return;
   }
   editingProviderId = id;
+  resetCpaAccountDiscovery();
   openProviderEditor();
   $("provider-form-title").textContent = `编辑 ${provider.display_name}`;
   $("provider-submit").textContent = "保存";
@@ -578,6 +787,7 @@ function closeProviderEditor() {
 function fillProviderFields(form, provider) {
   const fields = {
     total: provider.total,
+    api_key: provider.api_key,
     endpoint: provider.endpoint,
     path: provider.path === "/quota/cache" ? "/api/v1/quota/cache" : provider.path,
     auth_index: provider.auth_index,
@@ -601,28 +811,11 @@ function fillProviderFields(form, provider) {
   });
 }
 
-function setSecretFieldMode(editing) {
-  const secretInputs = Array.from(document.querySelectorAll('#add-form input[name="api_key"]'));
-  secretInputs.forEach((input) => {
-    if (input.dataset.addPlaceholder == null) {
-      input.dataset.addPlaceholder = input.placeholder;
-      input.dataset.requiredOnAdd = String(input.required);
-    }
-    input.value = "";
-    input.required = !editing && input.dataset.requiredOnAdd === "true";
-    input.placeholder = editing ? "留空以保留现有凭据" : input.dataset.addPlaceholder;
-  });
-  const clearRow = $("clear-secret-row");
-  const activeSecret = secretInputs.some((input) => !input.disabled);
-  clearRow.classList.toggle("hidden", !editing || !activeSecret);
-  clearRow.querySelector("input").checked = false;
-}
-
 function resetProviderForm() {
   editingProviderId = null;
   const form = $("add-form");
   form.reset();
-  setSecretFieldMode(false);
+  resetCpaAccountDiscovery();
   setCustomSelectValue($("add-type"), "minimax", "MiniMax（订阅 Key）");
   const rowKey = form.querySelector('[name="row_key"]');
   if (rowKey) setCustomSelectValue(rowKey, "rate_limit.primary_window", "Codex Primary Window");
@@ -637,8 +830,11 @@ function resetProviderForm() {
   closeProviderEditor();
 }
 
-function openConfirm(message, action) {
+function openConfirm(message, action, options = {}) {
+  const { title = "确认删除", confirmText = "删除" } = options;
+  $("confirm-title").textContent = title;
   $("confirm-message").textContent = message;
+  $("confirm-ok").textContent = confirmText;
   confirmAction = action;
   confirmModal.classList.remove("hidden");
   setTimeout(() => $("confirm-cancel").focus(), 20);
@@ -693,7 +889,7 @@ async function refresh() {
 async function loadSettings() {
   try {
     const cfg = await invoke("get_config");
-    settingsConfig = cfg;
+    window.__usagebarConfig = cfg;
     const sel = $("refresh-interval");
     setCustomSelectValue(sel, cfg.refresh_interval_secs, `${cfg.refresh_interval_secs} 秒`);
     renderSettingsProviders(lastSnapshot);
@@ -756,6 +952,46 @@ window.addEventListener("DOMContentLoaded", () => {
     $("provider-editor").scrollIntoView({ behavior: "smooth", block: "start" });
   });
   $("provider-edit-cancel").addEventListener("click", resetProviderForm);
+  $("cpa-direct-fields").querySelectorAll('[name="endpoint"], [name="api_key"]').forEach((input) => {
+    input.addEventListener("input", () => {
+      resetCpaAccountDiscovery();
+    });
+  });
+  $("cpa-discover-accounts").addEventListener("click", async () => {
+    const fields = $("cpa-direct-fields");
+    const endpoint = (fields.querySelector('[name="endpoint"]').value || "").trim();
+    const apiKey = (fields.querySelector('[name="api_key"]').value || "").trim();
+    if (!endpoint || !apiKey) {
+      showToast("请先填写 CLIProxyAPI 地址和管理密钥", true);
+      return;
+    }
+    const button = $("cpa-discover-accounts");
+    resetCpaAccountDiscovery();
+    const requestGeneration = cpaDiscoveryGeneration;
+    button.disabled = true;
+    button.textContent = "读取中…";
+    try {
+      const accounts = await invoke("discover_cpa_codex_accounts", { endpoint, apiKey });
+      const currentEndpoint = (fields.querySelector('[name="endpoint"]').value || "").trim();
+      const currentApiKey = (fields.querySelector('[name="api_key"]').value || "").trim();
+      if (
+        requestGeneration !== cpaDiscoveryGeneration ||
+        endpoint !== currentEndpoint ||
+        apiKey !== currentApiKey
+      ) return;
+      renderDiscoveredCpaAccounts(accounts);
+      if (accounts.length > 0) showToast(`发现 ${accounts.length} 个 Codex 账号`);
+    } catch (err) {
+      if (requestGeneration !== cpaDiscoveryGeneration) return;
+      resetCpaAccountDiscovery();
+      showToast(`读取账号失败: ${err}`, true);
+    } finally {
+      if (requestGeneration === cpaDiscoveryGeneration) {
+        button.disabled = $("add-type").value !== "cpa_direct";
+        button.textContent = "读取 Codex 账号";
+      }
+    }
+  });
   $("add-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -814,7 +1050,7 @@ window.addEventListener("DOMContentLoaded", () => {
       };
     } else if (type === "minimax") {
       const key = (fd.get("api_key") || "").toString().trim();
-      if (!key && !editingProviderId) {
+      if (!key) {
         showToast("请填写订阅 Key", true);
         return;
       }
@@ -831,7 +1067,7 @@ window.addEventListener("DOMContentLoaded", () => {
         showToast("请填写 CLIProxyAPI 地址", true);
         return;
       }
-      if (!managementKey && !editingProviderId) {
+      if (!managementKey) {
         showToast("请填写 CLIProxyAPI 管理密钥", true);
         return;
       }
@@ -850,7 +1086,7 @@ window.addEventListener("DOMContentLoaded", () => {
     } else if (type === "deepseek") {
       const key = (fd.get("api_key") || "").toString().trim();
       const endpoint = (fd.get("endpoint") || "").toString().trim();
-      if (!key && !editingProviderId) {
+      if (!key) {
         showToast("请填写 DeepSeek API Key", true);
         return;
       }
@@ -891,13 +1127,8 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      if (editingProviderId) {
-        const newSecret = (provider.api_key || "").toString().trim();
-        const clearApiKey = fd.get("clear_api_key") === "on" && !newSecret;
-        await invoke("update_provider", { provider, clearApiKey });
-      } else {
-        await invoke("add_provider", { provider });
-      }
+      const command = editingProviderId ? "update_provider" : "add_provider";
+      await invoke(command, { provider });
       showToast(editingProviderId ? "已保存" : "已添加");
       resetProviderForm();
       await refreshAll();

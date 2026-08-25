@@ -127,7 +127,7 @@
             <div id="minimax-fields" class="type-fields">
               <label class="field-row">
                 <span>订阅 Key</span>
-                <input name="api_key" type="password" placeholder="从 MiniMax 平台获取" autocomplete="off" autocapitalize="off" spellcheck="false" required />
+                <input name="api_key" type="password" placeholder="从 MiniMax 平台获取" required />
               </label>
               <label class="field-row">
                 <span>API 地址</span>
@@ -143,15 +143,20 @@
               </label>
               <label class="field-row">
                 <span>管理密钥</span>
-                <input name="api_key" type="password" placeholder="remote-management.secret-key 的原始密码" autocomplete="off" autocapitalize="off" spellcheck="false" required />
+                <input name="api_key" type="password" placeholder="remote-management.secret-key 的原始密码" required />
               </label>
+              <div class="cpa-account-discovery">
+                <button id="cpa-discover-accounts" class="compact-action-btn" type="button">读取 Codex 账号</button>
+                <span>自动填充账号信息</span>
+              </div>
+              <div id="cpa-account-results" class="cpa-account-results hidden"></div>
               <label class="field-row">
-                <span>Auth Index</span>
-                <input name="auth_index" placeholder="例如：0123456789abcdef" autocapitalize="off" spellcheck="false" required />
+                <span>Auth Index（可自动填充）</span>
+                <input name="auth_index" placeholder="例如：0123456789abcdef" required />
               </label>
               <label class="field-row">
                 <span>ChatGPT Account ID（可选）</span>
-                <input name="account_id" placeholder="例如：00000000-0000-4000-8000-000000000000" autocapitalize="off" spellcheck="false" />
+                <input name="account_id" placeholder="例如：00000000-0000-4000-8000-000000000000" />
               </label>
               <label class="field-row">
                 <span>额度窗口</span>
@@ -169,13 +174,13 @@
                   </div>
                 </div>
               </label>
-              <p class="hint">直接调用 CPA 的 <code>/v0/management/api-call</code>。管理密钥用于 CPA 外层鉴权，账号 Token 由 CPA 根据 Auth Index 自动替换；窗口类型按 <code>limit_window_seconds</code> 判断。</p>
+              <p class="hint">通过 CPA 查询普通、Code Review 和额外额度窗口。展开账户明细可查看套餐、订阅到期和每张完整重置额度，也可在二次确认后使用一次重置。</p>
             </div>
 
             <div id="deepseek-fields" class="type-fields hidden">
               <label class="field-row">
                 <span>DeepSeek API Key</span>
-                <input name="api_key" type="password" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false" required />
+                <input name="api_key" type="password" placeholder="sk-..." required />
               </label>
               <label class="field-row">
                 <span>API 地址</span>
@@ -229,7 +234,7 @@
               </label>
               <label class="field-row">
                 <span>Admin Session Cookie</span>
-                <input name="api_key" type="password" placeholder="AUTH_ENABLED=false 时留空" autocomplete="off" autocapitalize="off" spellcheck="false" />
+                <input name="api_key" type="password" placeholder="AUTH_ENABLED=false 时留空" />
               </label>
               <p class="hint">Auth Index 可从 Keeper 的 <code>/api/v1/usage/identities</code> 获取。Codex 的 Primary/Secondary 只是返回位置，实际周期以 Keeper 展示的窗口秒数为准。若启用登录，填写完整的 <code>cpa_usage_keeper_session=...</code>，不是 CPA 管理密码。</p>
             </div>
@@ -241,7 +246,7 @@
               </label>
               <label class="field-row">
                 <span>Bearer Token</span>
-                <input name="api_key" type="password" placeholder="可选" autocomplete="off" autocapitalize="off" spellcheck="false" />
+                <input name="api_key" type="password" placeholder="可选" />
               </label>
               <div class="field-row two-col">
                 <label>
@@ -254,11 +259,6 @@
                 </label>
               </div>
             </div>
-
-            <label id="clear-secret-row" class="clear-secret-row hidden">
-              <input name="clear_api_key" type="checkbox" />
-              <span>清除已保存的凭据</span>
-            </label>
 
             <div class="provider-form-actions">
               <button type="button" id="provider-edit-cancel" class="secondary-btn">取消</button>
