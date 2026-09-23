@@ -15,6 +15,9 @@ dist-ssr
 # 图标候选稿（临时生成物）
 icon-candidates/
 
+# 本地设计预览稿（不公开）
+dial-preview.html
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

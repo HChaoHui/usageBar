@@ -454,8 +454,8 @@ button.quota-row:active {
 .quota-dial {
   --gauge-color: var(--quota-high);
   position: relative;
-  width: 64px;
-  height: 64px;
+  width: 68px;
+  height: 68px;
   flex-shrink: 0;
 }
 
@@ -481,13 +481,13 @@ button.quota-row:active {
 .dial-track {
   fill: none;
   stroke: var(--track);
-  stroke-width: 3;
+  stroke-width: 4;
 }
 
 .dial-value {
   fill: none;
   stroke: var(--gauge-color);
-  stroke-width: 3;
+  stroke-width: 4;
   stroke-linecap: round;
   transition: stroke-dashoffset 220ms ease;
 }
@@ -511,11 +511,20 @@ button.quota-row:active {
   font-variant-numeric: tabular-nums;
 }
 
+.quota-dial-unit {
+  margin-left: 1px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0;
+  vertical-align: 0.35em;
+}
+
 .quota-dial-caption {
-  margin-top: 4px;
-  color: var(--tertiary);
-  font-size: 8px;
-  letter-spacing: 0.5px;
+  margin-top: 3px;
+  color: var(--secondary);
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
 }
 
 .quota-detail {

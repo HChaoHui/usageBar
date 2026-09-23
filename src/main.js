@@ -1129,8 +1129,22 @@ function windowRemaining(window) {
     : window.unit === "%" && window.total === 100
       ? `${remainingPct.toFixed(0)}%`
       : `${fmtNum(Math.max(0, window.total - window.used))}/${fmtNum(window.total)}${window.unit && window.unit !== "%" ? ` ${window.unit}` : ""}`;
-  const label = (window.label || "").replace(/\s*[·-]\s*无限(?:额度)?\s*$/u, "");
+  const label = normalizeQuotaLabel((window.label || "").replace(/\s*[·-]\s*无限(?:额度)?\s*$/u, ""));
   return { remainingPct, level, percent, exact, label };
+}
+
+// 折叠态统一补一个“每月”条：没有月限的用 ∞ 占位，已有月限的展示真实数据
+function ensureMonthlyBar(windows, primaryKey) {
+  if (primaryKey === "monthly") return null;
+  const monthly = (windows || []).find((window) => window.key === "monthly");
+  if (monthly) return null;
+  return {
+    key: "monthly",
+    label: "每月 · 无限额度",
+    used: 0,
+    total: 100,
+    unit: "%",
+  };
 }
 
 function renderWindowBars(windows) {
@@ -1149,8 +1163,9 @@ function renderWindowBars(windows) {
     </div>`;
 }
 
-function renderDial({ percent, center, level, label = "" }) {
-  const circumference = 2 * Math.PI * 27;
+function renderDial({ percent, center, unit = "", level, label = "" }) {
+  const radius = 28;
+  const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - percent / 100);
   const aria = label
     ? ` role="meter" aria-label="${escape(label)}剩余量" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent.toFixed(0)}"`
@@ -1158,12 +1173,12 @@ function renderDial({ percent, center, level, label = "" }) {
   return `
     <div class="quota-dial ${level}"${aria}>
       <svg viewBox="0 0 64 64" aria-hidden="true">
-        <circle class="dial-track" cx="32" cy="32" r="27" />
-        <circle class="dial-value" cx="32" cy="32" r="27" stroke-dasharray="${circumference}" stroke-dashoffset="${offset.toFixed(1)}" stroke-opacity="${percent > 0 ? 1 : 0}" />
+        <circle class="dial-track" cx="32" cy="32" r="28" />
+        <circle class="dial-value" cx="32" cy="32" r="28" stroke-dasharray="${circumference}" stroke-dashoffset="${offset.toFixed(1)}" stroke-opacity="${percent > 0 ? 1 : 0}" />
       </svg>
       <div class="quota-dial-center">
-        <strong class="quota-dial-percent">${escape(center)}</strong>
-        <span class="quota-dial-caption">剩余</span>
+        <strong class="quota-dial-percent">${escape(center)}${unit ? `<span class="quota-dial-unit">${escape(unit)}</span>` : ""}</strong>
+        <span class="quota-dial-caption">${escape(label || "剩余")}</span>
       </div>
     </div>`;
 }
@@ -1215,7 +1230,6 @@ function renderQuotaRow(p, u, clickable, showWindows = false) {
   // Expanded rows keep the previous label + percent + bar + reset layout.
   if (!showWindows) return renderExpandedQuotaRow(p, u, clickable);
   const windows = Array.isArray(p.usage?.windows) ? p.usage.windows : [];
-  const showWindowStrip = showWindows && windows.length > 1;
   const unlimited = /(?:^|\s)[·-]?\s*无限(?:额度)?\s*$/u.test(u.label || "");
   const usedPct = u.total > 0 ? Math.max(0, Math.min(100, (u.used / u.total) * 100)) : 0;
   const remainingPct = unlimited ? 100 : 100 - usedPct;
@@ -1238,15 +1252,18 @@ function renderQuotaRow(p, u, clickable, showWindows = false) {
   const scheduleTitle = u.reset_at
     ? `${label} · ${fmtResetAt(u.reset_at)} 重置${absolute ? ` · ${absolute}` : ""}`
     : u.fetched_at ? `更新于 ${fmtResetAt(u.fetched_at)}` : "";
-  const otherWindows = showWindowStrip
+  const otherWindows = showWindows
     ? windows.filter((window) => window.key !== u.key)
     : [];
+  const monthlyFallback = showWindows ? ensureMonthlyBar(windows, u.key) : null;
+  if (monthlyFallback) otherWindows.push(monthlyFallback);
   const bars = renderWindowBars(otherWindows);
   const content = `
       <div class="quota-module">
         ${renderDial({
           percent: remainingPct,
-          center: unlimited ? "∞" : `${remainingPct.toFixed(0)}%`,
+          center: unlimited ? "∞" : remainingPct.toFixed(0),
+          unit: unlimited ? "" : "%",
           level,
           label,
         })}
@@ -1265,14 +1282,22 @@ function renderQuotaRow(p, u, clickable, showWindows = false) {
     : `<div class="${rowClass}" data-id="${escape(p.id)}">${content}</div>`;
 }
 
+// 统一周/月窗口的显示文案：7 天、每周 → 周额度；每月 → 月额度
+function normalizeQuotaLabel(label) {
+  if (!label) return label;
+  if (/周|week|7\s*天|七天/i.test(label)) return "周额度";
+  if (/月|month/i.test(label)) return "月额度";
+  return label;
+}
+
 function quotaLabel(p, usage) {
-  if (usage?.label) return usage.label.replace(/\s*[·-]\s*无限(?:额度)?\s*$/u, "");
+  if (usage?.label) return normalizeQuotaLabel(usage.label.replace(/\s*[·-]\s*无限(?:额度)?\s*$/u, ""));
   if (p.kind === "minimax") return "限额";
   if (p.kind === "mcode") return "账号额度";
   if (p.kind === "clinepass") return "订阅额度";
   if (["cpa_direct", "cpa_keeper"].includes(p.kind)) {
     const text = `${p.id} ${p.display_name}`.toLowerCase();
-    if (/weekly|week|7d|周/.test(text)) return "7 天";
+    if (/weekly|week|7d|周/.test(text)) return "周额度";
     if (/5h|五小时|5小时/.test(text)) return "5 小时";
     return "额度";
   }

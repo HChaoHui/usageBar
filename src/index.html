@@ -135,7 +135,7 @@
                 <span>API 地址</span>
                 <input name="endpoint" value="https://www.minimaxi.com/v1/token_plan/remains" required />
               </label>
-              <p class="hint">同时显示 5 小时和每周额度，并保留各自的重置时间。</p>
+              <p class="hint">同时显示 5 小时和周额度，并保留各自的重置时间。</p>
             </div>
 
             <div id="mcode-fields" class="type-fields hidden">
@@ -158,7 +158,7 @@
             </div>
 
             <div id="clinepass-fields" class="type-fields hidden">
-              <p class="hint">每张卡片独立绑定一个 Cline 账号，显示 ClinePass 的 5 小时、每周和每月额度及套餐信息。先创建卡片，再点击登录并在官方网页确认授权码。</p>
+              <p class="hint">每张卡片独立绑定一个 Cline 账号，显示 ClinePass 的 5 小时、周额度和月额度及套餐信息。先创建卡片，再点击登录并在官方网页确认授权码。</p>
               <label class="field-row">
                 <span>折叠显示窗口</span>
                 <div class="custom-select" data-custom-select>
@@ -169,8 +169,8 @@
                   </button>
                   <div class="custom-select-menu hidden" role="listbox">
                     <button class="custom-select-option selected" type="button" role="option" aria-selected="true" data-value="five_hour">5 小时</button>
-                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="weekly">每周</button>
-                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="monthly">每月</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="weekly">周额度</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="monthly">月额度</button>
                     <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="auto">自动（显示最紧张窗口）</button>
                   </div>
                 </div>
@@ -224,8 +224,8 @@
                   <div class="custom-select-menu hidden" role="listbox">
                     <button class="custom-select-option selected" type="button" role="option" aria-selected="true" data-value="auto">自动（显示最紧张窗口）</button>
                     <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="five_hour">5 小时</button>
-                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="weekly">每周</button>
-                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="monthly">每月</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="weekly">周额度</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="monthly">月额度</button>
                   </div>
                 </div>
               </label>
@@ -283,7 +283,7 @@
                     <button class="custom-select-option selected" type="button" role="option" aria-selected="true" data-value="rate_limit.primary_window">Codex Primary Window</button>
                     <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="rate_limit.secondary_window">Codex Secondary Window</button>
                     <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="five_hour">Claude 5 小时</button>
-                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="seven_day">Claude 每周</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="seven_day">Claude 周额度</button>
                   </div>
                 </div>
               </label>
