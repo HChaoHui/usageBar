@@ -13,7 +13,7 @@ use std::path::Path;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProviderConfig {
     pub id: String,
-    /// Provider 类型：`"manual"` / `"http"` / `"minimax"` / `"cpa_direct"` 等
+    /// Provider 类型：`"manual"` / `"http"` / `"minimax"` / `"mcode"` / `"clinepass"` / `"cpa_direct"` 等
     #[serde(rename = "type")]
     pub kind: String,
     pub display_name: String,

@@ -1,4 +1,7 @@
+mod cline_auth;
 mod config;
+mod mcode_auth;
+mod oauth_vault;
 mod providers;
 
 use std::collections::{HashMap, HashSet};
@@ -49,6 +52,12 @@ fn provider_config_is_current(state: &AppState, expected: &ProviderConfig) -> bo
 }
 
 fn provider_operation_key(config: &ProviderConfig) -> String {
+    if config.kind == "mcode" {
+        return mcode_operation_key(&config.id);
+    }
+    if config.kind == "clinepass" {
+        return cline_operation_key(&config.id);
+    }
     if config.kind != "cpa_direct" {
         return config.id.clone();
     }
@@ -95,9 +104,13 @@ impl Drop for ResetInFlightGuard<'_> {
     }
 }
 
-fn begin_reset<'a>(state: &'a AppState, key: String) -> Result<ResetInFlightGuard<'a>, String> {
+fn begin_operation<'a>(
+    state: &'a AppState,
+    key: String,
+    busy_message: &str,
+) -> Result<ResetInFlightGuard<'a>, String> {
     if !state.reset_in_flight.lock().unwrap().insert(key.clone()) {
-        return Err("该 Codex 账号正在执行完整重置".into());
+        return Err(busy_message.into());
     }
     Ok(ResetInFlightGuard {
         set: &state.reset_in_flight,
@@ -105,7 +118,295 @@ fn begin_reset<'a>(state: &'a AppState, key: String) -> Result<ResetInFlightGuar
     })
 }
 
+#[cfg(test)]
+mod mcode_isolation_tests {
+    use super::*;
+
+    fn state() -> AppState {
+        let providers = ["a", "b"]
+            .into_iter()
+            .map(|id| {
+                serde_json::from_value(serde_json::json!({
+                    "id": id, "type": "mcode", "display_name": "MiniMax",
+                    "icon": "M", "color": "#7c6ff0", "unit": "%", "enabled": true
+                }))
+                .unwrap()
+            })
+            .collect();
+        AppState {
+            config: RwLock::new(AppConfig {
+                providers,
+                ..AppConfig::default()
+            }),
+            config_path: PathBuf::new(),
+            usage_cache: RwLock::new(HashMap::new()),
+            provider_locks: RwLock::new(HashMap::new()),
+            reset_in_flight: Mutex::new(HashSet::new()),
+        }
+    }
+
+    #[tokio::test]
+    async fn card_operations_are_independent_and_revalidate_after_lock() {
+        let state = state();
+        let a = mcode_provider_guard(&state, "a").await.unwrap();
+        let b = tokio::time::timeout(
+            Duration::from_millis(100),
+            mcode_provider_guard(&state, "b"),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        drop(b);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), mcode_provider_guard(&state, "a"))
+                .await
+                .is_err()
+        );
+        state
+            .config
+            .write()
+            .unwrap()
+            .providers
+            .retain(|p| p.id != "a");
+        drop(a);
+        assert!(mcode_provider_guard(&state, "a").await.is_err());
+        assert!(mcode_provider_guard(&state, "b").await.is_ok());
+    }
+
+    #[test]
+    fn signin_deduplication_and_renaming_do_not_cross_accounts() {
+        let state = state();
+        let a = begin_operation(&state, "minimax-signin:a".into(), "busy").unwrap();
+        assert!(begin_operation(&state, "minimax-signin:a".into(), "busy").is_err());
+        let b = begin_operation(&state, "minimax-signin:b".into(), "busy").unwrap();
+        drop(a);
+        assert!(begin_operation(&state, "minimax-signin:a".into(), "busy").is_ok());
+        assert!(begin_operation(&state, "minimax-signin:b".into(), "busy").is_err());
+        drop(b);
+        let mut cfg = state.config.write().unwrap();
+        let first = cfg.find_provider_mut("a").unwrap();
+        let original_key = provider_operation_key(first);
+        first.display_name = "renamed".into();
+        assert_eq!(provider_operation_key(first), original_key);
+        assert_ne!(
+            provider_operation_key(cfg.find_provider("b").unwrap()),
+            original_key
+        );
+    }
+}
+
 // ===================== Tauri commands =====================
+
+fn mcode_operation_key(id: &str) -> String {
+    format!("mcode:{id}")
+}
+
+fn cline_operation_key(id: &str) -> String {
+    format!("cline:{id}")
+}
+
+async fn cline_provider_guard(
+    state: &AppState,
+    id: &str,
+) -> Result<tokio::sync::OwnedMutexGuard<()>, String> {
+    let guard = provider_lock(state, &cline_operation_key(id))
+        .lock_owned()
+        .await;
+    if !state
+        .config
+        .read()
+        .unwrap()
+        .find_provider(id)
+        .is_some_and(|p| p.kind == "clinepass")
+    {
+        return Err("请先创建 ClinePass 账号卡片".into());
+    }
+    Ok(guard)
+}
+
+async fn mcode_provider_guard(
+    state: &AppState,
+    id: &str,
+) -> Result<tokio::sync::OwnedMutexGuard<()>, String> {
+    let guard = provider_lock(state, &mcode_operation_key(id))
+        .lock_owned()
+        .await;
+    if !state
+        .config
+        .read()
+        .unwrap()
+        .find_provider(id)
+        .is_some_and(|p| p.kind == "mcode")
+    {
+        return Err("请先创建 MiniMax 登录账号卡片".into());
+    }
+    Ok(guard)
+}
+
+#[tauri::command]
+async fn mcode_auth_status(
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<mcode_auth::AuthView, String> {
+    let _guard = mcode_provider_guard(state.inner(), &id).await?;
+    Ok(mcode_auth::session(&id).await?.view())
+}
+
+#[tauri::command]
+async fn mcode_login_start(
+    state: tauri::State<'_, AppState>,
+    id: String,
+    region: mcode_auth::Region,
+) -> Result<mcode_auth::AuthView, String> {
+    let _guard = mcode_provider_guard(state.inner(), &id).await?;
+    mcode_auth::session(&id).await?.start(region).await
+}
+
+fn invalidate_provider_cache(app: &tauri::AppHandle, id: &str) {
+    let state = app.state::<AppState>();
+    state.usage_cache.write().unwrap().remove(id);
+    let _ = app.emit("usagebar-updated", ());
+}
+
+#[tauri::command]
+async fn mcode_login_poll(
+    app: tauri::AppHandle,
+    id: String,
+    session_id: String,
+) -> Result<mcode_auth::AuthView, String> {
+    let state = app.state::<AppState>();
+    let _guard = mcode_provider_guard(state.inner(), &id).await?;
+    let result = mcode_auth::session(&id).await?.poll(&session_id).await;
+    // Also clear stale snapshots if persistence failed after a successful grant.
+    if result
+        .as_ref()
+        .map(|view| view.phase != "pending")
+        .unwrap_or(true)
+    {
+        invalidate_provider_cache(&app, &id);
+    }
+    result
+}
+
+#[tauri::command]
+async fn mcode_login_cancel(state: tauri::State<'_, AppState>, id: String) -> Result<(), String> {
+    let _guard = mcode_provider_guard(state.inner(), &id).await?;
+    mcode_auth::session(&id).await?.cancel();
+    Ok(())
+}
+
+#[tauri::command]
+async fn mcode_open_authorization(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let state = app.state::<AppState>();
+    let _guard = mcode_provider_guard(state.inner(), &id).await?;
+    let session = mcode_auth::session(&id).await?;
+    app.opener()
+        .open_url(session.verification_uri()?, None::<&str>)
+        .map_err(|_| "无法打开浏览器，请手动复制授权地址".into())
+}
+
+#[tauri::command]
+async fn mcode_logout(app: tauri::AppHandle, id: String) -> Result<Option<String>, String> {
+    let state = app.state::<AppState>();
+    let _guard = mcode_provider_guard(state.inner(), &id).await?;
+    let result = mcode_auth::session(&id).await?.logout().await;
+    invalidate_provider_cache(&app, &id);
+    result
+}
+
+#[tauri::command]
+async fn mcode_claim_signin(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<providers::mcode::SigninResult, String> {
+    let state = app.state::<AppState>();
+    let _claim_guard = begin_operation(
+        state.inner(),
+        format!("minimax-signin:{id}"),
+        "MiniMax 正在签到，请稍候",
+    )?;
+    let _guard = mcode_provider_guard(state.inner(), &id).await?;
+    let valid = state
+        .config
+        .read()
+        .unwrap()
+        .find_provider(&id)
+        .is_some_and(|provider| provider.kind == "mcode" && provider.enabled);
+    if !valid {
+        return Err("MiniMax 登录账号卡片不存在或已停用".into());
+    }
+    let result = providers::mcode::claim_signin(&id)
+        .await
+        .map_err(|error| error.to_string());
+    // Re-read status/balance even after timeout: the remote claim may have succeeded.
+    invalidate_provider_cache(&app, &id);
+    result
+}
+
+#[tauri::command]
+async fn cline_auth_status(
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<cline_auth::AuthView, String> {
+    let _guard = cline_provider_guard(state.inner(), &id).await?;
+    Ok(cline_auth::session(&id).await?.view())
+}
+
+#[tauri::command]
+async fn cline_login_start(
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<cline_auth::AuthView, String> {
+    let _guard = cline_provider_guard(state.inner(), &id).await?;
+    cline_auth::session(&id).await?.start().await
+}
+
+#[tauri::command]
+async fn cline_login_poll(
+    app: tauri::AppHandle,
+    id: String,
+    session_id: String,
+) -> Result<cline_auth::AuthView, String> {
+    let state = app.state::<AppState>();
+    let _guard = cline_provider_guard(state.inner(), &id).await?;
+    let result = cline_auth::session(&id).await?.poll(&session_id).await;
+    if result
+        .as_ref()
+        .map(|view| view.phase != "pending")
+        .unwrap_or(true)
+    {
+        invalidate_provider_cache(&app, &id);
+    }
+    result
+}
+
+#[tauri::command]
+async fn cline_login_cancel(state: tauri::State<'_, AppState>, id: String) -> Result<(), String> {
+    let _guard = cline_provider_guard(state.inner(), &id).await?;
+    cline_auth::session(&id).await?.cancel();
+    Ok(())
+}
+
+#[tauri::command]
+async fn cline_open_authorization(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let state = app.state::<AppState>();
+    let _guard = cline_provider_guard(state.inner(), &id).await?;
+    let session = cline_auth::session(&id).await?;
+    app.opener()
+        .open_url(session.verification_uri()?, None::<&str>)
+        .map_err(|_| "无法打开浏览器，请手动复制授权地址".into())
+}
+
+#[tauri::command]
+async fn cline_logout(app: tauri::AppHandle, id: String) -> Result<Option<String>, String> {
+    let state = app.state::<AppState>();
+    let _guard = cline_provider_guard(state.inner(), &id).await?;
+    let result = cline_auth::session(&id).await?.logout().await;
+    invalidate_provider_cache(&app, &id);
+    result
+}
 
 #[tauri::command]
 fn get_config(state: tauri::State<AppState>) -> AppConfig {
@@ -129,13 +430,50 @@ fn update_config(
 }
 
 #[tauri::command]
+fn reorder_provider(
+    state: tauri::State<AppState>,
+    id: String,
+    new_index: usize,
+) -> Result<(), String> {
+    let mut cfg = state.config.write().unwrap();
+    let current_index = cfg
+        .providers
+        .iter()
+        .position(|provider| provider.id == id)
+        .ok_or_else(|| format!("provider not found: {id}"))?;
+    let target_index = new_index.min(cfg.providers.len().saturating_sub(1));
+    if current_index == target_index {
+        return Ok(());
+    }
+    let provider = cfg.providers.remove(current_index);
+    cfg.providers.insert(target_index, provider);
+    cfg.save(&state.config_path)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 async fn list_providers(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<ProviderSnapshot>, String> {
     let cfg = state.config.read().unwrap().clone();
     let mut snapshots = Vec::new();
 
-    for pc in cfg.providers.iter().filter(|p| p.enabled) {
+    for pc in cfg.providers.iter() {
+        if !pc.enabled {
+            // 隐藏的卡片仍然返回给设置页管理，但不查询、不写缓存。
+            snapshots.push(ProviderSnapshot {
+                id: pc.id.clone(),
+                kind: pc.kind.clone(),
+                display_name: pc.display_name.clone(),
+                icon: pc.icon.clone(),
+                color: pc.color.clone(),
+                unit: pc.unit.clone(),
+                enabled: false,
+                usage: None,
+                error: None,
+            });
+            continue;
+        }
         // 优先用 cache；cache miss 则即时 fetch
         let cached = {
             let cache = state.usage_cache.read().unwrap();
@@ -147,6 +485,9 @@ async fn list_providers(
             let operation_key = provider_operation_key(pc);
             let lock = provider_lock(state.inner(), &operation_key);
             let _guard = lock.lock().await;
+            if !provider_config_is_current(state.inner(), pc) {
+                continue;
+            }
             let cached_after_lock = {
                 let cache = state.usage_cache.read().unwrap();
                 cache.get(&pc.id).cloned()
@@ -191,6 +532,7 @@ async fn list_providers(
             icon: pc.icon.clone(),
             color: pc.color.clone(),
             unit: pc.unit.clone(),
+            enabled: true,
             usage: entry.usage,
             error: entry.error,
         });
@@ -244,7 +586,11 @@ async fn consume_cpa_codex_reset(
         account_id: config.account_id,
         quota_window: config.quota_window.unwrap_or_else(|| "auto".into()),
     };
-    let _reset_guard = begin_reset(state.inner(), operation_key.clone())?;
+    let _reset_guard = begin_operation(
+        state.inner(),
+        operation_key.clone(),
+        "该 Codex 账号正在执行完整重置",
+    )?;
     let lock = provider_lock(state.inner(), &operation_key);
     let result = async {
         let _guard = lock.lock().await;
@@ -355,6 +701,15 @@ async fn update_provider(
         let lock = provider_lock(state.inner(), &operation_key);
         guards.push(lock.lock_owned().await);
     }
+    if !provider_config_is_current(state.inner(), &previous) {
+        return Err("provider changed while waiting; retry the update".into());
+    }
+    if previous.kind == "mcode" && provider.kind != "mcode" {
+        mcode_auth::session(&previous.id).await?.forget()?;
+    }
+    if previous.kind == "clinepass" && provider.kind != "clinepass" {
+        cline_auth::session(&previous.id).await?.forget()?;
+    }
     {
         let mut cfg = state.config.write().unwrap();
         let existing = cfg
@@ -382,6 +737,15 @@ async fn remove_provider(state: tauri::State<'_, AppState>, id: String) -> Resul
     let operation_key = provider_operation_key(&previous);
     let lock = provider_lock(state.inner(), &operation_key);
     let _guard = lock.lock().await;
+    if !provider_config_is_current(state.inner(), &previous) {
+        return Err("provider changed while waiting; retry the removal".into());
+    }
+    if previous.kind == "mcode" {
+        mcode_auth::session(&id).await?.forget()?;
+    }
+    if previous.kind == "clinepass" {
+        cline_auth::session(&id).await?.forget()?;
+    }
     {
         let mut cfg = state.config.write().unwrap();
         if cfg.find_provider(&id) != Some(&previous) {
@@ -453,6 +817,9 @@ async fn fetch_all_into_cache(app: &tauri::AppHandle) {
             let operation_key = provider_operation_key(pc);
             let lock = provider_lock(state.inner(), &operation_key);
             let _guard = lock.lock().await;
+            if !provider_config_is_current(state.inner(), pc) {
+                continue;
+            }
             let fetched_at = Utc::now();
             let previous = state.usage_cache.read().unwrap().get(&id).cloned();
             let result = provider.fetch().await;
@@ -517,6 +884,7 @@ pub fn run() {
             resize_window_to_content,
             get_config,
             update_config,
+            reorder_provider,
             list_providers,
             refresh_now,
             discover_cpa_codex_accounts,
@@ -525,6 +893,19 @@ pub fn run() {
             add_provider,
             update_provider,
             remove_provider,
+            mcode_auth_status,
+            mcode_login_start,
+            mcode_login_poll,
+            mcode_login_cancel,
+            mcode_open_authorization,
+            mcode_logout,
+            mcode_claim_signin,
+            cline_auth_status,
+            cline_login_start,
+            cline_login_poll,
+            cline_login_cancel,
+            cline_open_authorization,
+            cline_logout,
         ])
         .setup(|app| {
             // macOS: 作为菜单栏应用运行，不显示 Dock 图标。
@@ -544,6 +925,18 @@ pub fn run() {
             }
             eprintln!("usageBar: config path = {}", config_path.display());
             let config = AppConfig::load(&config_path);
+            let legacy_provider = config
+                .providers
+                .iter()
+                .find(|p| p.kind == "mcode")
+                .map(|p| p.id.as_str());
+            mcode_auth::init(
+                app.path().app_data_dir()?.join("minimax-oauth"),
+                legacy_provider,
+            )
+            .map_err(std::io::Error::other)?;
+            cline_auth::init(app.path().app_data_dir()?.join("cline-oauth"))
+                .map_err(std::io::Error::other)?;
 
             // 状态注入
             app.manage(AppState {
@@ -580,14 +973,17 @@ pub fn run() {
             let quit_item = MenuItem::with_id(app, "quit", "退出 usageBar", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_item, &refresh_item, &sep, &quit_item])?;
 
-            // tray 图标
+            // tray 图标：macOS 用单色模板图，其他平台用彩色图
+            #[cfg(target_os = "macos")]
+            let tray_icon =
+                tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon-mac.png"))?;
+            #[cfg(not(target_os = "macos"))]
+            let tray_icon =
+                tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?;
+
             let _tray = TrayIconBuilder::with_id("main-tray")
-                .icon(
-                    app.default_window_icon()
-                        .expect("missing default icon")
-                        .clone(),
-                )
-                .icon_as_template(true)
+                .icon(tray_icon)
+                .icon_as_template(cfg!(target_os = "macos"))
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .tooltip("usageBar — AI 订阅用量")

@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# 图标候选稿（临时生成物）
+icon-candidates/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

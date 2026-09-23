@@ -104,6 +104,9 @@ fn parse_usage(json: &serde_json::Value, preferred_currency: &str) -> Result<Usa
         }),
         reset_credits: None,
         codex_account: None,
+        mcode_account: None,
+        cline_account: None,
+        cline_usage: Vec::new(),
     })
 }
 

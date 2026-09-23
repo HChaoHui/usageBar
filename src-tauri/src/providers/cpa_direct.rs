@@ -654,6 +654,9 @@ fn parse_usage(json: &serde_json::Value, quota_window: &str) -> Result<Usage, Pr
         } else {
             None
         },
+        mcode_account: None,
+        cline_account: None,
+        cline_usage: Vec::new(),
     })
 }
 

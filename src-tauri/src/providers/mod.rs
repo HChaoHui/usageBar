@@ -2,11 +2,13 @@
 //!
 //! 所有 Provider 都通过统一的 `fetch()` 接口返回 `Usage`，前端只关心 Usage 结构。
 
+pub mod clinepass;
 pub mod cpa_direct;
 pub mod cpa_keeper;
 pub mod deepseek;
 pub mod http;
 pub mod manual;
+pub mod mcode;
 pub mod minimax;
 
 use async_trait::async_trait;
@@ -15,11 +17,13 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::config::ProviderConfig;
+pub use clinepass::ClinePassProvider;
 pub use cpa_direct::CpaDirectProvider;
 pub use cpa_keeper::CpaKeeperProvider;
 pub use deepseek::DeepSeekProvider;
 pub use http::HttpProvider;
 pub use manual::ManualProvider;
+pub use mcode::McodeProvider;
 pub use minimax::MinimaxProvider;
 
 /// 单个订阅的用量快照
@@ -68,6 +72,75 @@ pub struct CodexAccountDetails {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McodeSigninDay {
+    pub day_no: u32,
+    pub status: i64,
+    pub is_today: bool,
+    #[serde(default)]
+    pub points: Option<f64>,
+    #[serde(default)]
+    pub bonus_points: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McodeSignin {
+    pub can_claim: bool,
+    pub claimed_today: bool,
+    #[serde(default)]
+    pub days: Vec<McodeSigninDay>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McodeAccountDetails {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub account_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub account_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub plan_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub subscription_active_until: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub credit_balance: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub has_token_plan: Option<bool>,
+    pub quota_state: String,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub signin: Option<McodeSignin>,
+}
+
+/// Cline 账号按天聚合的 token 用量（来自 /api/v1/users/{id}/usages）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClineUsageDay {
+    /// UTC 日期，格式 YYYY-MM-DD
+    pub date: String,
+    pub tokens: u64,
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub credits: f64,
+    pub cost_usd: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClinePassAccountDetails {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub account_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub account_email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub account_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub plan_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub current_period_end: Option<DateTime<Utc>>,
+    /// 用量接口返回的原始条目数，用于区分“没有数据”和“数据解析失败”
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub usage_raw_items: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub usage_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Usage {
     pub used: f64,
     pub total: f64,
@@ -86,6 +159,12 @@ pub struct Usage {
     pub reset_credits: Option<ResetCreditDetails>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub codex_account: Option<CodexAccountDetails>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub mcode_account: Option<McodeAccountDetails>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub cline_account: Option<ClinePassAccountDetails>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub cline_usage: Vec<ClineUsageDay>,
 }
 
 #[derive(Debug, Error)]
@@ -106,7 +185,7 @@ pub enum ProviderError {
 
 impl ProviderError {
     pub fn is_transient(&self) -> bool {
-        matches!(self, Self::Transient(_))
+        matches!(self, Self::Network(_) | Self::Transient(_))
     }
 }
 
@@ -125,6 +204,8 @@ pub struct ProviderSnapshot {
     pub icon: String,
     pub color: String,
     pub unit: String,
+    /// 是否在主页面显示并参与查询；隐藏的 Provider 仍保留配置和登录凭证。
+    pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -166,6 +247,24 @@ pub fn build_provider(pc: &ProviderConfig) -> Option<Box<dyn Provider>> {
             unit: pc.unit.clone(),
             api_key: pc.api_key.clone().unwrap_or_default(),
             endpoint: pc.endpoint.clone().unwrap_or_default(),
+        })),
+        "mcode" => Some(Box::new(McodeProvider {
+            id: pc.id.clone(),
+            display_name: pc.display_name.clone(),
+            icon: pc.icon.clone(),
+            color: pc.color.clone(),
+            unit: pc.unit.clone(),
+        })),
+        "clinepass" => Some(Box::new(ClinePassProvider {
+            id: pc.id.clone(),
+            display_name: pc.display_name.clone(),
+            icon: pc.icon.clone(),
+            color: pc.color.clone(),
+            unit: pc.unit.clone(),
+            quota_window: pc
+                .quota_window
+                .clone()
+                .unwrap_or_else(|| "five_hour".into()),
         })),
         "deepseek" => Some(Box::new(DeepSeekProvider {
             id: pc.id.clone(),

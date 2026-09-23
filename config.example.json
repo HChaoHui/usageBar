@@ -25,6 +25,25 @@
       "api_key": "YOUR_MINIMAX_SUBSCRIPTION_KEY"
     },
     {
+      "id": "mcode-account",
+      "type": "mcode",
+      "display_name": "MCode Account",
+      "icon": "M",
+      "color": "#7c6ff0",
+      "unit": "%",
+      "enabled": true
+    },
+    {
+      "id": "clinepass",
+      "type": "clinepass",
+      "display_name": "ClinePass",
+      "icon": "C",
+      "color": "#9f58fa",
+      "unit": "%",
+      "enabled": true,
+      "quota_window": "five_hour"
+    },
+    {
       "id": "codex-cpa-direct",
       "type": "cpa_direct",
       "display_name": "Codex (CPA Direct)",

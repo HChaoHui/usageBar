@@ -21,6 +21,8 @@
   --quota-good: #4389e8;
   --quota-high: #2fb171;
   --focus: rgba(47, 127, 240, 0.28);
+  --signin-accent: #6854ce;
+  --signin-gold: #a36b13;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
   font-size: 12px;
   line-height: 1.4;
@@ -53,6 +55,8 @@
     --quota-good: #5598f4;
     --quota-high: #3ac881;
     --focus: rgba(67, 141, 245, 0.30);
+    --signin-accent: #b4a2ff;
+    --signin-gold: #edc87b;
   }
 }
 
@@ -201,17 +205,18 @@ input:focus-visible {
   overflow-y: hidden;
 }
 
-.providers::-webkit-scrollbar,
-.settings-body::-webkit-scrollbar {
-  width: 9px;
+.providers,
+.settings-body,
+.settings-providers {
+  scrollbar-width: none;
 }
 
-.providers::-webkit-scrollbar-thumb,
-.settings-body::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 10px;
-  background: rgba(75, 84, 85, 0.28);
-  background-clip: padding-box;
+.providers::-webkit-scrollbar,
+.settings-body::-webkit-scrollbar,
+.settings-providers::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .provider-group {
@@ -296,6 +301,20 @@ input:focus-visible {
   gap: 6px;
 }
 
+/* 展开后各条目之间用细分隔线区分 */
+.provider-group.expanded .quota-list > * + * {
+  position: relative;
+}
+
+.provider-group.expanded .quota-list > * + *::before {
+  content: "";
+  position: absolute;
+  top: -3.5px;
+  left: 2px;
+  right: 2px;
+  border-top: 0.5px solid var(--separator);
+}
+
 .quota-row {
   --quota-color: var(--quota-good);
   width: 100%;
@@ -303,7 +322,7 @@ input:focus-visible {
   padding: 7px 8px 6px;
   border: 0.5px solid transparent;
   border-radius: 8px;
-  background: var(--quota-surface);
+  background: transparent;
   color: var(--text);
   text-align: left;
 }
@@ -331,6 +350,11 @@ button.quota-row:active {
   font-size: 10.5px;
   font-weight: 620;
   letter-spacing: 0.05px;
+}
+
+/* 展开状态沿用原来的「窗口名 + 百分比 + 横条 + 重置时间」布局 */
+.provider-group.expanded .quota-row {
+  background: var(--quota-surface);
 }
 
 .quota-head {
@@ -421,10 +445,186 @@ button.quota-row:active {
   text-overflow: ellipsis;
 }
 
+.quota-module {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.quota-dial {
+  --gauge-color: var(--quota-high);
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+
+.quota-dial.quota-low {
+  --gauge-color: var(--quota-low);
+}
+
+.quota-dial.quota-medium {
+  --gauge-color: var(--quota-medium);
+}
+
+.quota-dial.quota-good {
+  --gauge-color: var(--quota-good);
+}
+
+.quota-dial svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.dial-track {
+  fill: none;
+  stroke: var(--track);
+  stroke-width: 3;
+}
+
+.dial-value {
+  fill: none;
+  stroke: var(--gauge-color);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 220ms ease;
+}
+
+.quota-dial-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.quota-dial-percent {
+  color: var(--gauge-color);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.quota-dial-caption {
+  margin-top: 4px;
+  color: var(--tertiary);
+  font-size: 8px;
+  letter-spacing: 0.5px;
+}
+
+.quota-detail {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.quota-detail-title {
+  overflow: hidden;
+  color: var(--secondary);
+  font-size: 9.5px;
+  font-weight: 620;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.quota-detail-schedule {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--tertiary);
+  font-size: 9px;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.quota-detail-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
 .provider-edit-hint {
   color: var(--secondary);
   font-size: 9px;
   white-space: nowrap;
+}
+
+.quota-window-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.quota-bar-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 31px;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.quota-bar-label {
+  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tertiary);
+  font-size: 10px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.quota-bar-track {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--track);
+}
+
+.quota-bar-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--quota-high);
+  transition: width 220ms ease;
+}
+
+.quota-bar-track i.quota-low {
+  background: var(--quota-low);
+}
+
+.quota-bar-track i.quota-medium {
+  background: var(--quota-medium);
+}
+
+.quota-bar-track i.quota-good {
+  background: var(--quota-good);
+}
+
+.quota-bar-value {
+  flex-shrink: 0;
+  color: var(--secondary);
+  font-size: 10px;
+  font-weight: 550;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .quota-row.error {
@@ -435,7 +635,7 @@ button.quota-row:active {
 }
 
 .provider-group:not(.expanded) .provider-summary-card {
-  height: 66px;
+  min-height: 66px;
 }
 
 .balance-summary-row {
@@ -575,6 +775,296 @@ button.quota-row:active {
   color: var(--blue);
   font-size: 13px;
   font-weight: 700;
+}
+
+.signin-card {
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 0.5px solid var(--separator);
+  font-variant-numeric: tabular-nums;
+}
+
+.signin-card svg {
+  width: 9px;
+  height: 9px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.signin-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 21px;
+  margin-bottom: 5px;
+  font-size: 9px;
+}
+
+.signin-heading-copy {
+  min-width: 0;
+  color: var(--secondary);
+}
+
+.signin-count {
+  margin-left: 5px;
+  color: var(--tertiary);
+}
+
+.signin-status {
+  color: var(--tertiary);
+  font-size: 8px;
+}
+
+.signin-status.is-done {
+  color: var(--green);
+}
+
+.signin-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+  list-style: none;
+}
+
+.signin-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 4px 1px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--secondary);
+  line-height: 1.25;
+}
+
+.signin-day-top {
+  font-size: 8px;
+}
+
+.signin-reward {
+  max-width: 100%;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.signin-bonus {
+  max-width: 100%;
+  color: var(--signin-gold);
+  font-size: 7px;
+  white-space: nowrap;
+}
+
+.signin-day-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-top: auto;
+  color: var(--tertiary);
+  font-size: 7px;
+}
+
+.signin-day.is-today {
+  border-color: color-mix(in srgb, var(--signin-accent) 40%, transparent);
+}
+
+.signin-day.is-ready {
+  background: color-mix(in srgb, var(--signin-accent) 7%, var(--surface));
+}
+
+.signin-day.is-today .signin-day-top,
+.signin-day.is-ready .signin-reward,
+.signin-day.is-ready .signin-day-state {
+  color: var(--signin-accent);
+}
+
+.signin-day.is-claimed .signin-day-state {
+  color: var(--green);
+}
+
+.signin-day.is-unavailable .signin-reward {
+  color: var(--tertiary);
+}
+
+.signin-claim-btn {
+  flex-shrink: 0;
+  min-height: 21px;
+  padding: 2px 7px;
+  border: 0.5px solid color-mix(in srgb, var(--signin-accent) 30%, var(--separator));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--signin-accent) 7%, transparent);
+  color: var(--signin-accent);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.signin-claim-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--signin-accent) 14%, transparent);
+}
+
+.signin-claim-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.signin-empty {
+  padding: 3px 0;
+  color: var(--tertiary);
+  font-size: 9px;
+}
+
+.mcode-auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+#mcode-auth-url,
+#cline-auth-url {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 11px;
+}
+
+#mcode-user-code,
+#cline-user-code {
+  user-select: text;
+  letter-spacing: 2px;
+}
+
+.mcode-quota-state {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 0.5px solid var(--separator);
+  color: var(--tertiary);
+  font-size: 9px;
+}
+
+.mcode-identity-row,
+.cline-identity-row {
+  align-items: flex-start;
+}
+
+.mcode-identity-row > span:first-child,
+.cline-identity-row > span:first-child {
+  flex-shrink: 0;
+}
+
+.mcode-identity-value,
+.cline-identity-value {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--secondary);
+  text-align: right;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.mcode-identity-uid {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.cline-usage-chart {
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 0.5px solid var(--separator);
+}
+
+.cline-usage-head {
+  min-height: 16px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cline-usage-total {
+  flex-shrink: 0;
+  color: var(--secondary);
+  font-size: 9px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cline-usage-plot {
+  position: relative;
+  margin-top: 4px;
+}
+
+.cline-usage-svg {
+  display: block;
+  width: 100%;
+  height: 68px;
+}
+
+.cline-usage-line {
+  fill: none;
+  stroke: var(--blue);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cline-usage-area {
+  fill: var(--blue);
+  fill-opacity: 0.12;
+}
+
+.cline-usage-dot {
+  fill: var(--panel-strong);
+  stroke: var(--blue);
+  stroke-width: 1.2;
+}
+
+.cline-usage-hit {
+  fill: transparent;
+}
+
+.cline-usage-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cline-usage-labels span {
+  position: absolute;
+  color: var(--tertiary);
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cline-usage-axis {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 2px;
+  color: var(--tertiary);
+  font-size: 8.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cline-usage-empty {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 0.5px solid var(--separator);
+  color: var(--tertiary);
+  font-size: 9px;
 }
 
 .reset-credit-list {
@@ -1262,18 +1752,6 @@ input[type="number"]::-webkit-outer-spin-button {
   max-height: 184px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-
-.settings-providers::-webkit-scrollbar {
-  width: 8px;
-}
-
-.settings-providers::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: rgba(75, 84, 85, 0.28);
-  background-clip: padding-box;
 }
 
 .settings-provider-row {
@@ -1282,6 +1760,48 @@ input[type="number"]::-webkit-outer-spin-button {
   align-items: center;
   gap: 8px;
   padding: 7px 9px 7px 11px;
+}
+
+.provider-visible-btn {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--secondary);
+  cursor: pointer;
+}
+
+.provider-visible-btn:hover {
+  background: var(--hover);
+}
+
+.provider-visible-btn.is-off {
+  color: var(--tertiary);
+  opacity: 0.7;
+}
+
+.provider-visible-btn:disabled {
+  opacity: 0.4;
+  cursor: wait;
+}
+
+.provider-visible-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.settings-provider-row.is-hidden .settings-provider-edit {
+  opacity: 0.55;
 }
 
 .settings-provider-edit {
@@ -1320,6 +1840,41 @@ input[type="number"]::-webkit-outer-spin-button {
 .sp-kind {
   color: var(--tertiary);
   font-size: 9px;
+}
+
+.provider-order-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.provider-order-btn {
+  width: 21px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--tertiary);
+  font-size: 12px;
+  cursor: default;
+}
+
+.provider-order-btn.top {
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.provider-order-btn:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--blue);
+}
+
+.provider-order-btn:disabled {
+  opacity: 0.25;
 }
 
 .icon-btn-danger {

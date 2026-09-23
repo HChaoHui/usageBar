@@ -183,6 +183,9 @@ fn parse_usage(
         balance: None,
         reset_credits: None,
         codex_account: None,
+        mcode_account: None,
+        cline_account: None,
+        cline_usage: Vec::new(),
     })
 }
 

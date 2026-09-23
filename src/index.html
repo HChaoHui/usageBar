@@ -111,6 +111,8 @@
                 </button>
                 <div class="custom-select-menu hidden" role="listbox">
                   <button class="custom-select-option selected" type="button" role="option" aria-selected="true" data-value="minimax">MiniMax（订阅 Key）</button>
+                  <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="mcode">MiniMax（独立登录）</button>
+                  <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="clinepass">ClinePass（独立登录）</button>
                   <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="cpa_direct">CLIProxyAPI（Codex 直连）</button>
                   <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="deepseek">DeepSeek（API 余额）</button>
                 </div>
@@ -134,6 +136,59 @@
                 <input name="endpoint" value="https://www.minimaxi.com/v1/token_plan/remains" required />
               </label>
               <p class="hint">同时显示 5 小时和每周额度，并保留各自的重置时间。</p>
+            </div>
+
+            <div id="mcode-fields" class="type-fields hidden">
+              <p class="hint">每张卡片独立绑定一个 MiniMax 账号，分别显示套餐、Credits、额度和签到。先创建卡片，再选择国内或国际账号授权；切换账号时可在官方授权页选择其他账号。</p>
+              <div class="mcode-auth-actions">
+                <button id="mcode-login-cn" class="compact-action-btn" type="button">国内账号登录</button>
+                <button id="mcode-login-en" class="compact-action-btn" type="button">国际账号登录</button>
+                <button id="mcode-logout" class="compact-action-btn hidden" type="button">退出账号</button>
+              </div>
+              <p id="mcode-auth-status" class="hint" role="status" aria-live="polite">正在读取登录状态…</p>
+              <div id="mcode-auth-device" class="hidden">
+                <p class="hint">授权码：<strong id="mcode-user-code"></strong></p>
+                <p id="mcode-auth-expiry" class="hint"></p>
+                <input id="mcode-auth-url" aria-label="官方授权地址" readonly />
+                <div class="mcode-auth-actions">
+                  <button id="mcode-auth-open" class="compact-action-btn" type="button">打开授权网页</button>
+                  <button id="mcode-auth-cancel" class="compact-action-btn" type="button">取消登录</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="clinepass-fields" class="type-fields hidden">
+              <p class="hint">每张卡片独立绑定一个 Cline 账号，显示 ClinePass 的 5 小时、每周和每月额度及套餐信息。先创建卡片，再点击登录并在官方网页确认授权码。</p>
+              <label class="field-row">
+                <span>折叠显示窗口</span>
+                <div class="custom-select" data-custom-select>
+                  <input type="hidden" name="quota_window" value="five_hour" />
+                  <button class="custom-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span data-select-label>5 小时</span>
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg>
+                  </button>
+                  <div class="custom-select-menu hidden" role="listbox">
+                    <button class="custom-select-option selected" type="button" role="option" aria-selected="true" data-value="five_hour">5 小时</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="weekly">每周</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="monthly">每月</button>
+                    <button class="custom-select-option" type="button" role="option" aria-selected="false" data-value="auto">自动（显示最紧张窗口）</button>
+                  </div>
+                </div>
+              </label>
+              <div class="mcode-auth-actions">
+                <button id="cline-login" class="compact-action-btn" type="button">登录 Cline 账号</button>
+                <button id="cline-logout" class="compact-action-btn hidden" type="button">退出账号</button>
+              </div>
+              <p id="cline-auth-status" class="hint" role="status" aria-live="polite">正在读取登录状态…</p>
+              <div id="cline-auth-device" class="hidden">
+                <p class="hint">授权码：<strong id="cline-user-code"></strong></p>
+                <p id="cline-auth-expiry" class="hint"></p>
+                <input id="cline-auth-url" aria-label="官方授权地址" readonly />
+                <div class="mcode-auth-actions">
+                  <button id="cline-auth-open" class="compact-action-btn" type="button">打开授权网页</button>
+                  <button id="cline-auth-cancel" class="compact-action-btn" type="button">取消登录</button>
+                </div>
+              </div>
             </div>
 
             <div id="cpa-direct-fields" class="type-fields hidden">
